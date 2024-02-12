@@ -3,12 +3,13 @@
     "author": {
       "firstName": "John",
       "id": "4c2307ba-3d40-442f-b1ff-b271f63904ca",
-      "lastName": "Doe"
+      "lastName": "Doe",
+      "updatedAt": 3
     },
     "createdAt": 1655648404000,
     "id": "c67ed376-52bf-4d4e-ba2a-7a0f8467b22a",
     "status": "seen",
-    "text": "Ooowww ☺️",
+    "text": "おぉぉぅぅぅ ☺️",
     "type": "text"
   },
   {
@@ -33,24 +34,26 @@
       "firstName": "Janice",
       "id": "e52552f4-835d-4dbe-ba77-b076e659774d",
       "imageUrl": "https://i.pravatar.cc/300?u=e52552f4-835d-4dbe-ba77-b076e659774d",
-      "lastName": "King"
+      "lastName": "King",
+      "updatedAt": 0
     },
     "createdAt": 1655648402000,
     "id": "4e048753-2d60-4144-bc28-9967050aaf12",
     "status": "seen",
-    "text": "What a ~nice~ _wonderful_ sunset! 😻",
+    "text": "なんて~すてき~ _素晴らしい_ 夕焼けなんでしょう！ 😻",
     "type": "text"
   },
   {
     "author": {
       "firstName": "Matthew",
       "id": "82091008-a484-4a89-ae75-a22bf8d6f3ac",
-      "lastName": "White"
+      "lastName": "White",
+      "updatedAt": 21
     },
     "createdAt": 1655648401000,
     "id": "64747b28-df19-4a0c-8c47-316dc3546e3c",
     "status": "seen",
-    "text": "Here you go buddy! 💪",
+    "text": "これだぜ相棒！ 💪",
     "type": "text"
   },
   {
@@ -72,24 +75,26 @@
     "author": {
       "firstName": "John",
       "id": "4c2307ba-3d40-442f-b1ff-b271f63904ca",
-      "lastName": "Doe"
+      "lastName": "Doe",
+      "updatedAt": 3
     },
     "createdAt": 1655624464000,
     "id": "38681a33-2563-42aa-957b-cfc12f791d16",
     "status": "seen",
-    "text": "Matt, where is my Madrid guide?",
+    "text": "マット、マドリードのガイドをくれなのだ",
     "type": "text"
   },
   {
     "author": {
       "firstName": "Matthew",
       "id": "82091008-a484-4a89-ae75-a22bf8d6f3ac",
-      "lastName": "White"
+      "lastName": "White",
+      "updatedAt": 21
     },
     "createdAt": 1655624463000,
     "id": "113bb2e8-f74e-42cd-aa30-4085a0f52c58",
     "status": "seen",
-    "text": "Awesome! 😍",
+    "text": "最高だな！ 😍",
     "type": "text"
   },
   {
@@ -97,12 +102,13 @@
       "firstName": "Janice",
       "id": "e52552f4-835d-4dbe-ba77-b076e659774d",
       "imageUrl": "https://i.pravatar.cc/300?u=e52552f4-835d-4dbe-ba77-b076e659774d",
-      "lastName": "King"
+      "lastName": "King",
+      "updatedAt": 2
     },
     "createdAt": 1655624462000,
     "id": "22212d42-1252-4641-9786-d6f83b2ce4a8",
     "status": "seen",
-    "text": "Matt, what do you think?",
+    "text": "マット、あなたはどう思う？",
     "type": "text"
   },
   {
@@ -110,24 +116,26 @@
       "firstName": "Janice",
       "id": "e52552f4-835d-4dbe-ba77-b076e659774d",
       "imageUrl": "https://i.pravatar.cc/300?u=e52552f4-835d-4dbe-ba77-b076e659774d",
-      "lastName": "King"
+      "lastName": "King",
+      "updatedAt": 2
     },
     "createdAt": 1655624461000,
     "id": "afc2269a-374b-4382-8864-b3b60d1e8cd7",
     "status": "seen",
-    "text": "Yeah! Together with Demna, Mark Hamill and others 🥰",
+    "text": "もちろん！ デムナやマークハミルもね 🥰",
     "type": "text"
   },
   {
     "author": {
       "firstName": "John",
       "id": "4c2307ba-3d40-442f-b1ff-b271f63904ca",
-      "lastName": "Doe"
+      "lastName": "Doe",
+      "updatedAt": 3
     },
     "createdAt": 1655624460000,
     "id": "634b2f0b-2486-4bfe-b36d-1c7d6313c7b3",
     "status": "seen",
-    "text": "Guys! Did you know Imagine Dragons became ambassadors for u24.gov.ua ?",
+    "text": "みんな！ イマジンドラゴンズが u24.gov.ua のアンバサダーになったことは知ってるかい？",
     "type": "text"
   }
 ]
