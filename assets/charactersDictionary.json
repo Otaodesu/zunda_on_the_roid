@@ -5,7 +5,6 @@
     },
     "name": "四国めたん",
     "speaker_uuid": "7ffcb7ce-00ec-4bdc-82cd-45a8889e43ff",
-    "personalColor": "Colors.pink←これは読めへんでしょこの言語の雰囲気で先行評価するとは思えやん",
     "styles": [
       {
         "name": "ノーマル",
@@ -29,11 +28,10 @@
       },
       {
         "name": "ヒソヒソ",
-        "id": 37,
-        "立ち絵追加するならここに置けばいいんちゃう": "ファイルパス"
+        "id": 37
       }
     ],
-    "version": "0.14.4"
+    "version": "0.14.6"
   },
   {
     "supported_features": {
@@ -65,9 +63,17 @@
       {
         "name": "ヒソヒソ",
         "id": 38
+      },
+      {
+        "name": "ヘロヘロ",
+        "id": 75
+      },
+      {
+        "name": "なみだめ",
+        "id": 76
       }
     ],
-    "version": "0.14.4"
+    "version": "0.14.6"
   },
   {
     "supported_features": {
@@ -75,13 +81,16 @@
     },
     "name": "春日部つむぎ",
     "speaker_uuid": "35b2c544-660e-401e-b503-0e14c635303a",
+    "personalColor": "Colors.amber←これは読めへんでしょこの言語の雰囲気で先行評価するとは思えやん",
+    "tachieDescription": "立ち絵アイコンの出典",
     "styles": [
       {
         "name": "ノーマル",
-        "id": 8
+        "id": 8,
+        "tachieUrl": "GitHub上に置いておいてそれを参照するとか"
       }
     ],
-    "version": "0.14.4"
+    "version": "0.14.6"
   },
   {
     "supported_features": {
@@ -95,7 +104,7 @@
         "id": 10
       }
     ],
-    "version": "0.14.4"
+    "version": "0.14.6"
   },
   {
     "supported_features": {
@@ -113,7 +122,7 @@
         "id": 65
       }
     ],
-    "version": "0.14.4"
+    "version": "0.14.6"
   },
   {
     "supported_features": {
@@ -139,7 +148,7 @@
         "id": 41
       }
     ],
-    "version": "0.14.4"
+    "version": "0.14.6"
   },
   {
     "supported_features": {
@@ -169,7 +178,7 @@
         "id": 35
       }
     ],
-    "version": "0.14.4"
+    "version": "0.14.6"
   },
   {
     "supported_features": {
@@ -181,9 +190,33 @@
       {
         "name": "ノーマル",
         "id": 13
+      },
+      {
+        "name": "熱血",
+        "id": 81
+      },
+      {
+        "name": "不機嫌",
+        "id": 82
+      },
+      {
+        "name": "喜び",
+        "id": 83
+      },
+      {
+        "name": "しっとり",
+        "id": 84
+      },
+      {
+        "name": "かなしみ",
+        "id": 85
+      },
+      {
+        "name": "囁き",
+        "id": 86
       }
     ],
-    "version": "0.14.4"
+    "version": "0.14.6"
   },
   {
     "supported_features": {
@@ -197,7 +230,7 @@
         "id": 14
       }
     ],
-    "version": "0.14.4"
+    "version": "0.14.6"
   },
   {
     "supported_features": {
@@ -227,7 +260,7 @@
         "id": 19
       }
     ],
-    "version": "0.14.4"
+    "version": "0.14.6"
   },
   {
     "supported_features": {
@@ -243,9 +276,25 @@
       {
         "name": "セクシー／あん子",
         "id": 66
+      },
+      {
+        "name": "泣き",
+        "id": 77
+      },
+      {
+        "name": "怒り",
+        "id": 78
+      },
+      {
+        "name": "喜び",
+        "id": 79
+      },
+      {
+        "name": "のんびり",
+        "id": 80
       }
     ],
-    "version": "0.14.4"
+    "version": "0.14.6"
   },
   {
     "supported_features": {
@@ -259,7 +308,7 @@
         "id": 21
       }
     ],
-    "version": "0.14.4"
+    "version": "0.14.6"
   },
   {
     "supported_features": {
@@ -285,7 +334,7 @@
         "id": 26
       }
     ],
-    "version": "0.14.4"
+    "version": "0.14.6"
   },
   {
     "supported_features": {
@@ -303,7 +352,7 @@
         "id": 28
       }
     ],
-    "version": "0.14.4"
+    "version": "0.14.6"
   },
   {
     "supported_features": {
@@ -325,7 +374,7 @@
         "id": 31
       }
     ],
-    "version": "0.14.4"
+    "version": "0.14.6"
   },
   {
     "supported_features": {
@@ -339,7 +388,7 @@
         "id": 42
       }
     ],
-    "version": "0.14.4"
+    "version": "0.14.6"
   },
   {
     "supported_features": {
@@ -361,7 +410,7 @@
         "id": 45
       }
     ],
-    "version": "0.14.4"
+    "version": "0.14.6"
   },
   {
     "supported_features": {
@@ -375,7 +424,7 @@
         "id": 46
       }
     ],
-    "version": "0.14.4"
+    "version": "0.14.6"
   },
   {
     "supported_features": {
@@ -401,7 +450,7 @@
         "id": 50
       }
     ],
-    "version": "0.14.4"
+    "version": "0.14.6"
   },
   {
     "supported_features": {
@@ -415,7 +464,7 @@
         "id": 51
       }
     ],
-    "version": "0.14.4"
+    "version": "0.14.6"
   },
   {
     "supported_features": {
@@ -429,7 +478,7 @@
         "id": 52
       }
     ],
-    "version": "0.14.4"
+    "version": "0.14.6"
   },
   {
     "supported_features": {
@@ -443,7 +492,7 @@
         "id": 53
       }
     ],
-    "version": "0.14.4"
+    "version": "0.14.6"
   },
   {
     "supported_features": {
@@ -457,7 +506,7 @@
         "id": 54
       }
     ],
-    "version": "0.14.4"
+    "version": "0.14.6"
   },
   {
     "supported_features": {
@@ -479,7 +528,7 @@
         "id": 57
       }
     ],
-    "version": "0.14.4"
+    "version": "0.14.6"
   },
   {
     "supported_features": {
@@ -501,7 +550,7 @@
         "id": 60
       }
     ],
-    "version": "0.14.4"
+    "version": "0.14.6"
   },
   {
     "supported_features": {
@@ -527,6 +576,78 @@
         "id": 64
       }
     ],
-    "version": "0.14.4"
+    "version": "0.14.6"
+  },
+  {
+    "supported_features": {
+      "permitted_synthesis_morphing": "ALL"
+    },
+    "name": "栗田まろん",
+    "speaker_uuid": "04dbd989-32d0-40b4-9e71-17c920f2a8a9",
+    "styles": [
+      {
+        "name": "ノーマル",
+        "id": 67
+      }
+    ],
+    "version": "0.14.6"
+  },
+  {
+    "supported_features": {
+      "permitted_synthesis_morphing": "ALL"
+    },
+    "name": "あいえるたん",
+    "speaker_uuid": "dda44ade-5f9c-4a3a-9d2c-2a976c7476d9",
+    "styles": [
+      {
+        "name": "ノーマル",
+        "id": 68
+      }
+    ],
+    "version": "0.14.6"
+  },
+  {
+    "supported_features": {
+      "permitted_synthesis_morphing": "ALL"
+    },
+    "name": "満別花丸",
+    "speaker_uuid": "287aa49f-e56b-4530-a469-855776c84a8d",
+    "styles": [
+      {
+        "name": "ノーマル",
+        "id": 69
+      },
+      {
+        "name": "元気",
+        "id": 70
+      },
+      {
+        "name": "ささやき",
+        "id": 71
+      },
+      {
+        "name": "ぶりっ子",
+        "id": 72
+      },
+      {
+        "name": "ボーイ",
+        "id": 73
+      }
+    ],
+    "version": "0.14.6"
+  },
+  {
+    "supported_features": {
+      "permitted_synthesis_morphing": "ALL"
+    },
+    "name": "琴詠ニア",
+    "speaker_uuid": "97a4af4b-086e-4efd-b125-7ae2da85e697",
+    "styles": [
+      {
+        "name": "ノーマル",
+        "id": 74
+      }
+    ],
+    "version": "0.14.6"
   }
 ]
