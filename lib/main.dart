@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/services.dart' show Clipboard, ClipboardData, rootBundle;
 import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
 import 'package:flutter_chat_ui/flutter_chat_ui.dart';
 import 'package:fluttertoast/fluttertoast.dart';
@@ -17,6 +17,7 @@ import 'package:uuid/uuid.dart';
 
 import 'launch_chrome.dart';
 import 'synthesizeSerif.dart'; // これで自作のファイルを行き来できるみたい.
+import 'text_dictionary_editor.dart';
 import 'ui_dialog_classes.dart';
 
 // 真っ赤ならターミナルでflutter pub get.
@@ -55,14 +56,13 @@ class _ChatPageState extends State<ChatPage> {
 
   // 誰が投稿するのかはこのフォーマットで決める。デフォルトの話者はここ.
   var _user = const types.User(
-    // もとはfinalだしconst types.User。varにしてなおconstを入れてよい理由はえいえんの謎.
     id: '388f246b-8c41-4ac1-8e2d-5d79f3ff56d9',
     firstName: 'デフォルトスピーカー', // 追加した.
     lastName: 'デフォルトスタイル',
     updatedAt: 3, // これがspeakerId😫 スタイル違いも右に表示するにはこれしかなかったんだ…！.
   ); // 後から変更したいプロパティは必須プロパティでなくても初期化が必要だとわかった.
 
-  var _isAllPlayAllowed = true;
+  AudioPlayManager playerKun = AudioPlayManager(); // プレーヤーくん爆誕.以後は彼に頼んでください.
 
   @override
   void initState() {
@@ -228,7 +228,7 @@ class _ChatPageState extends State<ChatPage> {
     );
 
     setState(() {
-      _messages = _messages;
+      _messages;
     }); // 表示を更新する。こんなことしてたら重くなるんじゃ？ともかくおもしろい操作感になった.
   }
 
@@ -238,10 +238,8 @@ class _ChatPageState extends State<ChatPage> {
 
       if (message.uri.startsWith('http')) {
         try {
-          final index = _messages.indexWhere(
-              (element) => element.id == message.id); // Idからメッセージの位置を逆引きしてる.
-          final updatedMessage =
-              (_messages[index] as types.FileMessage).copyWith(
+          final index = _messages.indexWhere((element) => element.id == message.id); // Idからメッセージの位置を逆引きしてる.
+          final updatedMessage = (_messages[index] as types.FileMessage).copyWith(
             isLoading: true,
           ); // 特定のプロパティだけ上書きしつつコピーしてる.
 
@@ -260,10 +258,8 @@ class _ChatPageState extends State<ChatPage> {
             await file.writeAsBytes(bytes);
           }
         } finally {
-          final index =
-              _messages.indexWhere((element) => element.id == message.id);
-          final updatedMessage =
-              (_messages[index] as types.FileMessage).copyWith(
+          final index = _messages.indexWhere((element) => element.id == message.id);
+          final updatedMessage = (_messages[index] as types.FileMessage).copyWith(
             isLoading: null,
           );
 
@@ -279,10 +275,11 @@ class _ChatPageState extends State<ChatPage> {
       print('ふきだしタップを検出。メッセージIDは${message.id}。再再生してみます！');
 
       if (message is! types.TextMessage) {
+        // もはや型チェックいらんくしたけどどうすっかな？.
         return;
       }
       // 再生してみて成否を取得.
-      final isURLStillPlayable = await playSerifFromMessage(message);
+      final isURLStillPlayable = await playerKun.playFromMessage(message);
       if (isURLStillPlayable == false) {
         _synthesizeFromMessage(message); // 再合成する。連打しないでね🫡.
       }
@@ -291,7 +288,7 @@ class _ChatPageState extends State<ChatPage> {
 
   // ふきだしを長押ししたときここが発動.
   void _handleMessageLongPress(BuildContext _, types.Message message) async {
-    print('メッセージ${message.id}が長押しされたのを検出しました😎型はxxです←ここ書く');
+    print('メッセージ${message.id}が長押しされたのを検出しました😎型は${message.runtimeType}です');
 
     if (message is! types.TextMessage) {
       print('TextMessage型じゃないので何もしません');
@@ -314,16 +311,16 @@ class _ChatPageState extends State<ChatPage> {
       case '音声をダウンロードする（.mp3）':
         _goToDownloadPageMp3(message.id);
         break;
-      case '再合成する':
-        _synthesizeFromMessage(message); // これはそのっ💦まぁいいかなって….
+      case 'セリフを追加する':
+        _addMessageBelow(message.id);
         break;
       case '話者を変更する（入力欄の話者へ）':
         _changeSpeaker(message.id, _user);
         break;
-      case '一つ上に移動する':
+      case '上に移動する':
         _moveMessageUp(message.id);
         break;
-      case '一つ下に移動する':
+      case '下に移動する':
         _moveMessageDown(message.id);
         break;
       default:
@@ -372,8 +369,7 @@ class _ChatPageState extends State<ChatPage> {
 
   void _goToDownloadPage(String messageId) {
     final index = _messages.indexWhere((element) => element.id == messageId);
-    final map =
-        _messages[index].metadata?['mappedAudioURLs']; // この流れもっとスッキリできる.
+    final map = _messages[index].metadata?['mappedAudioURLs']; // この流れもっとスッキリできる.
     if (map == null) {
       Fluttertoast.showToast(msg: 'まだ合成中です🤔'); // これだけでトースト表示😘.
       return;
@@ -385,8 +381,7 @@ class _ChatPageState extends State<ChatPage> {
 
   void _goToDownloadPageMp3(String messageId) {
     final index = _messages.indexWhere((element) => element.id == messageId);
-    final map =
-        _messages[index].metadata?['mappedAudioURLs']; // この流れもっとスッキリできる.
+    final map = _messages[index].metadata?['mappedAudioURLs']; // この流れもっとスッキリできる.
     if (map == null) {
       Fluttertoast.showToast(msg: 'まだ合成中です🤔'); // これだけでトースト表示😘.
       return;
@@ -394,6 +389,27 @@ class _ChatPageState extends State<ChatPage> {
       Fluttertoast.showToast(msg: 'ブラウザを起動します😆');
       launchChrome(map['mp3DownloadUrl']);
     }
+  }
+
+  void _addMessageBelow(String messageId) async {
+    // _addMessageとはなんの関係もございません…！insertMessage？も違うしなぁ😴.
+    final index = _messages.indexWhere((element) => element.id == messageId);
+    final text = await showEditingDialog(context, '${_user.firstName}（${_user.lastName}）');
+    // ↕時間経過あり.
+    if (text == null) {
+      await Fluttertoast.showToast(msg: 'ぬるぽ');
+      return;
+    }
+    final newMessage = types.TextMessage(
+      author: _user, // 時間経過中に長押しメッセージ消えてる可能性あるので(ある？)これで.
+      createdAt: DateTime.now().millisecondsSinceEpoch,
+      id: const Uuid().v4(),
+      text: text,
+    );
+    setState(() {
+      _messages.insert(index, newMessage);
+    });
+    _synthesizeFromMessage(newMessage);
   }
 
   void _changeSpeaker(String messageId, types.User afterActor) {
@@ -445,8 +461,7 @@ class _ChatPageState extends State<ChatPage> {
     final targetMessageId = message.id; // メッセージ更新時に取り扱うのはUUIDベースだと意識付ける.
 
     // 合成中とわかる表示に更新する.
-    final index =
-        _messages.indexWhere((element) => element.id == targetMessageId);
+    final index = _messages.indexWhere((element) => element.id == targetMessageId);
     final updatedMessage = (_messages[index] as types.TextMessage).copyWith(
       status: types.Status.sending,
     );
@@ -454,35 +469,41 @@ class _ChatPageState extends State<ChatPage> {
       _messages[index] = updatedMessage;
     });
 
-    final synthesizeResponce = await synthesizeSerif(
-      message.text,
-      message.author.updatedAt,
-      message.id,
-    ); // ここでsynthesizeSerif.dartを呼び出し。各ダウンロードURLが入ったマップが返ってくるはず.
-    // 禍根…もとのmetadataが消える可能性がある。例えば再合成時👻.
-    final updatedMetadataAS = <String, dynamic>{};
-    updatedMetadataAS['mappedAudioURLs'] = synthesizeResponce;
+    final serif = await convertTextToSerif(message.text); // 読み方辞書を適用して置換する.
 
-    // 合成完了と分かる表示に更新する.
+    final synthesizeResponce = await synthesizeSerif(
+      serif: serif,
+      speakerId: message.author.updatedAt,
+    ); // ここでsynthesizeSerif.dartを呼び出し。各ダウンロードURLが入ったマップが返ってくるはず.
+    // ↕音声合成完了までの時間経過あり.
+    // メッセージにマップを格納し、合成完了/合成エラーと分かる表示に更新する.
     try {
-      final indexAfterSynthesize =
-          _messages.indexWhere((element) => element.id == targetMessageId);
-      final updatedMessageAfterSynthesize =
-          (_messages[indexAfterSynthesize] as types.TextMessage).copyWith(
-        status: types.Status.sent,
-        metadata: updatedMetadataAS,
-      );
+      // ASはAfterSynthesize。mappedAudioURLsキーの名前は他でも使う☢.
+      final indexAS = _messages.indexWhere((element) => element.id == targetMessageId);
+      // もとのmetadataを保持👻 空ならnull合体演算子で空mapを作成😶.
+      final updatedMetadataAS = _messages[indexAS].metadata ?? {};
+      updatedMetadataAS['mappedAudioURLs'] = synthesizeResponce;
+      var updatedMessageAS = _messages[indexAS]; // スコープのためここで定義.
+      if (synthesizeResponce['mp3DownloadUrl'] == null) {
+        updatedMessageAS = (updatedMessageAS).copyWith(
+          status: types.Status.error,
+          metadata: updatedMetadataAS,
+        );
+      } else {
+        updatedMessageAS = (updatedMessageAS).copyWith(
+          status: types.Status.sent,
+          metadata: updatedMetadataAS,
+        );
+      }
       setState(() {
-        _messages[indexAfterSynthesize] = updatedMessageAfterSynthesize;
+        _messages[indexAS] = updatedMessageAS;
       });
     } catch (e) {
       // 合成中にメッセージを削除すると例外。使い方合ってる？.
       await Fluttertoast.showToast(msg: 'キャッチ🤗\n見つからなかったので例外発生！');
       return;
     }
-
-    // 合成後の自動再生はサブ関数が担当している。ToDo: 合成エラー時の仕組みづくり.
-    print('😆$targetMessageIdの音声合成が正常に完了しました！');
+    print('😆$targetMessageIdの音声合成が正常に完了しました!');
   }
 
   // User型じゃないといかん。後からどうやって話者変えようか.
@@ -499,9 +520,8 @@ class _ChatPageState extends State<ChatPage> {
   // デフォチャットをアセット内からロードしてる。ここをまねてキャラクター一覧のJSONを取り込みたい.
   void _loadMessages() async {
     final response = await rootBundle.loadString('assets/messages.json');
-    final messages = (jsonDecode(response) as List)
-        .map((e) => types.Message.fromJson(e as Map<String, dynamic>))
-        .toList();
+    final messages =
+        (jsonDecode(response) as List).map((e) => types.Message.fromJson(e as Map<String, dynamic>)).toList();
 
     setState(() {
       _messages = messages;
@@ -511,14 +531,13 @@ class _ChatPageState extends State<ChatPage> {
   // キャラクター一覧JSONをアセットからロードしていくぜ！.
   void _loadCharactersDictionary() async {
     // "isn't referenced" って「俺はこんなの認めねーよ」だと思ったら違うんかい.
-    final charactersDictionaryRaw =
-        await rootBundle.loadString('assets/charactersDictionary.json');
+    final charactersDictionaryRaw = await rootBundle.loadString('assets/charactersDictionary.json');
     // ここで例外なら『［Flutter］Assets （テキスト、画像）の利用方法』.
     final charactersDictionary = json.decode(charactersDictionaryRaw);
     _charactersDictionary = charactersDictionary;
   }
 
-  // ハードシチュエーションをテストするため.
+  // メッセージを空にする.
   void _deleteAllMessages() {
     setState(() {
       _messages = [];
@@ -530,10 +549,13 @@ class _ChatPageState extends State<ChatPage> {
     // ファイルを作って～、ユーザーがフォルダを選択して～、ってのが当初の予定だったんです。はい.
     // 手元のデバイスにデータを保存するのは、どこにあるかもわからないサーバーに保存するより遥かに難しい.
     final exportingText = jsonEncode(_messages);
-    showDialog<String>(
-      context: context,
-      builder: (_) => AlterateOfKakidashi(whatYouWantShow: exportingText),
+    showAlterateOfKakidashi(
+      context,
+      exportingText,
     );
+    // 長押しでコピーしてくれない場合があるので勝手にやる😩『【Flutter】クリップボードにコピーする』.
+    final data = ClipboardData(text: exportingText);
+    Clipboard.setData(data);
   }
 
   // テキストのエクスポート.
@@ -541,9 +563,9 @@ class _ChatPageState extends State<ChatPage> {
     final exportingText = await makeText(_messages);
     // Awaitだけで待っといてくれや感.
     if (mounted) {
-      await showDialog<String>(
-        context: context,
-        builder: (_) => AlterateOfKakidashi(whatYouWantShow: exportingText),
+      showAlterateOfKakidashi(
+        context,
+        exportingText,
       );
     }
   }
@@ -552,22 +574,16 @@ class _ChatPageState extends State<ChatPage> {
   // ノリで作ってしまったが絶対あぶない動き方。ヤバイ火遊び🎩🧢.
   void _letsImportProject() async {
     final whatYouInputed = await showEditingDialog(context, 'ずんだ');
-    final updatedMessages = combineMessagesFromJson(
-      whatYouInputed,
-      _messages,
-    );
+    // ↕時間経過あり.
+    final updatedMessages = combineMessagesFromJson(whatYouInputed, _messages);
     if (updatedMessages == _messages) {
-      await Fluttertoast.showToast(
-        msg: '😾これは.zrprojではありません！\n: $whatYouInputed',
-      );
+      await Fluttertoast.showToast(msg: '😾これは.zrprojではありません！\n: $whatYouInputed');
       return;
     }
     setState(() {
       _messages = updatedMessages;
     });
-    await Fluttertoast.showToast(
-      msg: '😹インポートに成功しました！！！',
-    );
+    await Fluttertoast.showToast(msg: '😹インポートに成功しました！！！');
   }
 
   void _handleHamburgerPressed() {
@@ -578,32 +594,23 @@ class _ChatPageState extends State<ChatPage> {
         onExportProjectPressed: _showProjectExportView,
         onExportAsTextPressed: _showTextExportView,
         onImportProjectPressed: _letsImportProject,
+        onEditTextDictionaryPressed: () => showDictionaryEditWindow(context),
       ),
     );
   }
 
-  // 先頭から順番に再生する関数。状態管理？😌そんなものはない.
+  // 先頭から順番に再生する関数。状態管理？😌そんなものはちょっとある.
   void _startPlayAll() async {
-    _isAllPlayAllowed = true;
     final thisIsIterable = _messages.reversed; // 再生中にリストに変更が加わると例外になるためコピーする.
     final targetMessages = thisIsIterable.toList(); // なおもIterableのため固定する.
     // 些細な問題🙃: 再生中の変更が適用されない。合成完了とか.
 
-    for (var pickedMessage in targetMessages) {
-      if (!_isAllPlayAllowed) {
-        return;
-      }
-      if (pickedMessage is types.TextMessage) {
-        await playSerifFromMessage(pickedMessage);
-      }
-    }
+    playerKun.playFromMessages(targetMessages);
+    // なぜ人類はメソッド呼び出しをピリオドにしたのか？ "playerKun,pleasePlayFromMessage" 🫠.
   }
 
   void _stopPlayAll() {
-    Fluttertoast.showToast(
-      msg: 'そのうち止まります！',
-    );
-    _isAllPlayAllowed = false;
+    playerKun.stop(); // すぐさま止まります！.
   }
 
   @override
@@ -633,6 +640,9 @@ class _ChatPageState extends State<ChatPage> {
                 fontSize: 10.0,
               ),
             ),
+          ),
+          l10n: ChatL10nEn(
+            inputPlaceholder: '${_user.firstName}（${_user.lastName}）',
           ),
         ),
       );
