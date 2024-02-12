@@ -24,19 +24,19 @@ class FukidashiLongPressDialog extends StatelessWidget {
           SimpleDialogOption(
             child: const ListTile(
               leading: Icon(Icons.move_up_rounded),
-              title: Text('一つ上に移動する'),
+              title: Text('上に移動する'),
             ),
             onPressed: () {
-              Navigator.pop(context, '一つ上に移動する'); // このテキストを呼び出し元に返すので合わせる！.
+              Navigator.pop(context, '上に移動する'); // このテキストを呼び出し元に返すので合わせる！.
             },
           ),
           SimpleDialogOption(
             child: const ListTile(
               leading: Icon(Icons.move_down_rounded),
-              title: Text('一つ下に移動する'),
+              title: Text('下に移動する'),
             ),
             onPressed: () {
-              Navigator.pop(context, '一つ下に移動する'); // このテキストを呼び出し元に返すので合わせる！.
+              Navigator.pop(context, '下に移動する'); // このテキストを呼び出し元に返すので合わせる！.
             },
           ),
           SimpleDialogOption(
@@ -59,11 +59,11 @@ class FukidashiLongPressDialog extends StatelessWidget {
           ),
           SimpleDialogOption(
             child: const ListTile(
-              leading: Icon(Icons.refresh_rounded),
-              title: Text('再合成する'),
+              leading: Icon(Icons.add_comment_rounded),
+              title: Text('セリフを追加する'), // せっセリフっ…！💦synthe関数で書いたことは忘れてください.
             ),
             onPressed: () {
-              Navigator.pop(context, '再合成する');
+              Navigator.pop(context, 'セリフを追加する');
             },
           ),
           SimpleDialogOption(
@@ -99,8 +99,7 @@ class AppBarForChat extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) => AppBar(
-        title:
-            const Text('非公式のプロジェクト', style: TextStyle(color: Colors.black54)),
+        title: const Text('非公式のプロジェクト', style: TextStyle(color: Colors.black54)),
         backgroundColor: Colors.white.withAlpha(230),
 
         // 逆に出っ張らせたいんやが？超難しそう？.
@@ -121,7 +120,7 @@ class AppBarForChat extends StatelessWidget implements PreferredSizeWidget {
             ),
           ),
           Tooltip(
-            message: '連続再生を停止する',
+            message: '再生を停止する',
             child: IconButton(
               icon: const Icon(Icons.stop_rounded),
               onPressed: onStopTap,
@@ -148,12 +147,14 @@ class HamburgerMenuForChat extends StatelessWidget {
     this.onExportAsTextPressed,
     this.onDeleteAllMessagesPressed,
     this.onImportProjectPressed,
+    this.onEditTextDictionaryPressed,
   });
 
   final VoidCallback? onExportProjectPressed;
   final VoidCallback? onDeleteAllMessagesPressed;
   final VoidCallback? onExportAsTextPressed;
   final VoidCallback? onImportProjectPressed;
+  final VoidCallback? onEditTextDictionaryPressed;
 
   @override
   Widget build(BuildContext context) => SimpleDialog(
@@ -182,6 +183,13 @@ class HamburgerMenuForChat extends StatelessWidget {
             ),
           ),
           SimpleDialogOption(
+            onPressed: onEditTextDictionaryPressed,
+            child: const ListTile(
+              leading: Icon(Icons.import_contacts_rounded),
+              title: Text('読み方辞書を開く'),
+            ),
+          ),
+          SimpleDialogOption(
             onPressed: onDeleteAllMessagesPressed,
             child: const ListTile(
               leading: Icon(Icons.delete_forever_rounded),
@@ -194,12 +202,17 @@ class HamburgerMenuForChat extends StatelessWidget {
 
 // ファイル書き出し機能のかわりに表示することにしたUI😖.
 class AlterateOfKakidashi extends StatelessWidget {
-  const AlterateOfKakidashi({super.key, required this.whatYouWantShow});
+  const AlterateOfKakidashi({
+    super.key,
+    required this.whatYouWantShow,
+    required this.whatYouWantSetTitle,
+  });
   final String whatYouWantShow;
+  final String whatYouWantSetTitle;
 
   @override
   Widget build(BuildContext context) => SimpleDialog(
-        title: const Text('はいっ、書き出したっ！🤔'),
+        title: Text(whatYouWantSetTitle),
         surfaceTintColor: Colors.green,
         children: [
           Padding(
@@ -212,6 +225,21 @@ class AlterateOfKakidashi extends StatelessWidget {
           ),
         ],
       );
+}
+
+// ↑の書き出し代替ダイアログを呼び出す関数.
+void showAlterateOfKakidashi(
+  BuildContext context,
+  String exportingText, [
+  String dialogTitle = 'はいっ、書き出した！🤔',
+]) {
+  showDialog<String>(
+    context: context,
+    builder: (_) => AlterateOfKakidashi(
+      whatYouWantShow: exportingText,
+      whatYouWantSetTitle: dialogTitle,
+    ),
+  );
 }
 
 // 入力ダイアログ。プロジェクトのインポートとかに使う。『ダイアログでもテキスト入力がしたい』🥰.
@@ -230,8 +258,8 @@ class _TextEditingDialogState extends State<TextEditingDialog> {
   @override
   void initState() {
     super.initState();
-    // TextFormFieldに初期値を代入する.
-    controller.text = widget.text ?? '';
+
+    controller.text = widget.text ?? ''; // TextFormFieldに初期値を代入する.
     focusNode.addListener(
       () {
         // フォーカスが当たったときに文字列が選択された状態にする.
