@@ -73,10 +73,12 @@ Future<Map<String, dynamic>> synthesizeSerif({required String serif, int? speake
 
     if (audioStatusMapped['audioCount'] > 0) {
       break;
-    } else {
-      print('🤗まだaudioCount=0なので待ちます');
-      await Future.delayed(const Duration(seconds: 2));
     }
+    if (audioStatusMapped['isAudioError'] == true) {
+      return erroredMap; // 絵文字だけのオーダーはエラーになる.
+    }
+    print('🤗まだaudioCount=0なので待ちます');
+    await Future.delayed(const Duration(seconds: 2));
   }
   print('😋${DateTime.now()}audioCountは${audioStatusMapped['audioCount']}です！');
   if (audioStatusMapped['audioCount'] == null) {
@@ -106,7 +108,7 @@ Future<Map<String, dynamic>> synthesizeSerif({required String serif, int? speake
     }
   }
 
-  // 一定の割合が合成完了するまで待つ。追いつくことがあるので🐁.
+  // 一定の割合が合成完了するまで待つ。追いつくことがあるので🐇.
   const synthesizeWaitRatio = 0.4; // 割合はここ。再生が不安定なら増やしてみて.
   for (var i = 0; i < 100; i++) {
     final halfAudioCount = ((audioCount - 1) * synthesizeWaitRatio).round(); // カウント=1の時は0.mp3まで。リストと同様.
@@ -163,7 +165,7 @@ Future<Map<String, dynamic>> synthesizeSerif({required String serif, int? speake
         }
       } // ↑halfAudioCountまでは重複チェックしてるけどまいっか.
     }
-    // チューニングに使いやがれ print('ちなみに最終ACは${await checkAudioUrlPlayable('$mp3AudioCountableUrl${audioCount - 1}.mp3')}'); .
+    // print('ちなみに最終ACは${await checkAudioUrlPlayable('$mp3AudioCountableUrl${audioCount - 1}.mp3')}'); // 実験用。チューニングに使いやがれ.
   });
 
   // こっちは再生完了を見張る。画期的やけど不思議な動き方や😣.
@@ -214,6 +216,7 @@ Future<Map<String, dynamic>> synthesizeSerif({required String serif, int? speake
 // DateTime.now()の方が書きやすいし見やすい～（ハチワレ）.
 // かくしてgapless playlists + 先読み再生可能チェック + 再生中ポーズにたどり着いたのである（「のだ」はミーム汚染のため回避）.
 // ポーズ前とポーズ中で先読みdistanceを変えるとよりインテリジェントやね.
+// 読み方辞書機能によって安定性低下の要因である英単語のスペル読みが解消（できるようになった）。じゃんじゃん登録しよう！！.
 
 // メッセージ再再生関連を一挙に制御するクラス作ったった！.
 class AudioPlayManager {
