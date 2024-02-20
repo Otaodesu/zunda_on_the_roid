@@ -80,7 +80,7 @@ class _ChatPageState extends State<ChatPage> {
   // 添付ボタン押したときの表示と各項目を押したときの挙動がここで決まる。関数になってる？.
   void _handleAttachmentPressed() {
     // 表示する各ボタンを準備する。リストにまとめるギミックにしてみた.
-    List<Widget> textButtons = [];
+    final textButtons = <Widget>[];
     print(_charactersDictionary); // 読みだせてるかデバッグ.
 
     // 二重ループでリストにボタンを追加しまくる。これはヤバいでPADの速度じゃありえん.
@@ -275,12 +275,11 @@ class _ChatPageState extends State<ChatPage> {
       print('ふきだしタップを検出。メッセージIDは${message.id}。再再生してみます！');
 
       if (message is! types.TextMessage) {
-        // もはや型チェックいらんくしたけどどうすっかな？.
-        return;
+        return; // もはや型チェックいらんくしたけどどうすっかな？.
       }
       // 再生してみて成否を取得.
       final isURLStillPlayable = await playerKun.playFromMessage(message);
-      if (isURLStillPlayable == false) {
+      if (!isURLStillPlayable) {
         _synthesizeFromMessage(message); // 再合成する。連打しないでね🫡.
       }
     }
@@ -369,25 +368,23 @@ class _ChatPageState extends State<ChatPage> {
 
   void _goToDownloadPage(String messageId) {
     final index = _messages.indexWhere((element) => element.id == messageId);
-    final map = _messages[index].metadata?['mappedAudioURLs']; // この流れもっとスッキリできる.
-    if (map == null) {
+    if (_messages[index].metadata?['mappedAudioURLs']['wavDownloadUrl'] is String) {
+      Fluttertoast.showToast(msg: 'ブラウザを起動します😆');
+      launchChrome(_messages[index].metadata?['mappedAudioURLs']['wavDownloadUrl']);
+    } else {
       Fluttertoast.showToast(msg: 'まだ合成中です🤔'); // これだけでトースト表示😘.
       return;
-    } else {
-      Fluttertoast.showToast(msg: 'ブラウザを起動します😆');
-      launchChrome(map['wavDownloadUrl']);
     }
   }
 
   void _goToDownloadPageMp3(String messageId) {
     final index = _messages.indexWhere((element) => element.id == messageId);
-    final map = _messages[index].metadata?['mappedAudioURLs']; // この流れもっとスッキリできる.
-    if (map == null) {
+    if (_messages[index].metadata?['mappedAudioURLs']['mp3DownloadUrl'] is String) {
+      Fluttertoast.showToast(msg: 'ブラウザを起動します😆');
+      launchChrome(_messages[index].metadata?['mappedAudioURLs']['mp3DownloadUrl']);
+    } else {
       Fluttertoast.showToast(msg: 'まだ合成中です🤔'); // これだけでトースト表示😘.
       return;
-    } else {
-      Fluttertoast.showToast(msg: 'ブラウザを起動します😆');
-      launchChrome(map['mp3DownloadUrl']);
     }
   }
 
@@ -471,10 +468,11 @@ class _ChatPageState extends State<ChatPage> {
 
     final serif = await convertTextToSerif(message.text); // 読み方辞書を適用して置換する.
 
+    // ここでsynthesizeSerif.dartを呼び出す。各ダウンロードURLが入ったマップが返ってくるはず.
     final synthesizeResponce = await synthesizeSerif(
       serif: serif,
       speakerId: message.author.updatedAt,
-    ); // ここでsynthesizeSerif.dartを呼び出し。各ダウンロードURLが入ったマップが返ってくるはず.
+    );
     // ↕音声合成完了までの時間経過あり.
     // メッセージにマップを格納し、合成完了/合成エラーと分かる表示に更新する.
     try {
@@ -559,25 +557,24 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   // テキストのエクスポート.
-  void _showTextExportView() async {
-    final exportingText = await makeText(_messages);
-    // Awaitだけで待っといてくれや感.
-    if (mounted) {
-      showAlterateOfKakidashi(
-        context,
-        exportingText,
-      );
-    }
+  void _showTextExportView() {
+    final exportingText = makeText(_messages);
+    // ↓async関数にする場合if(mounted)が必要になるかも.
+    showAlterateOfKakidashi(
+      context,
+      exportingText,
+    );
+    Clipboard.setData(ClipboardData(text: exportingText));
   }
 
   // プロジェクトのインポート.
   // ノリで作ってしまったが絶対あぶない動き方。ヤバイ火遊び🎩🧢.
   void _letsImportProject() async {
-    final whatYouInputed = await showEditingDialog(context, 'ずんだ');
+    final whatYouInputted = await showEditingDialog(context, 'ずんだ');
     // ↕時間経過あり.
-    final updatedMessages = combineMessagesFromJson(whatYouInputed, _messages);
+    final updatedMessages = combineMessagesFromJson(whatYouInputted, _messages);
     if (updatedMessages == _messages) {
-      await Fluttertoast.showToast(msg: '😾これは.zrprojではありません！\n: $whatYouInputed');
+      await Fluttertoast.showToast(msg: '😾これは.zrprojではありません！\n: $whatYouInputted');
       return;
     }
     setState(() {
