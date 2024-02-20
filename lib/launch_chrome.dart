@@ -20,19 +20,19 @@ void launchChrome(String targetUrl) async {
 }
 
 // テキスト形式でエクスポートするときの内容を作るよ！っていう関数。名前適当すぎやろ.
-Future<String> makeText(List<types.Message> messages) async {
+String makeText(List<types.Message> messages) {
   final thisIsIterable = messages.reversed; // 再生中にリストに変更が加わると例外になるためコピーする.
   final targetMessages = thisIsIterable.toList(); // なおもIterableのため固定する.
 
-  List<String> outputList = [];
   // 本家VOICEVOXの「テキスト読み込み」機能と互換性のあるテキストを作っていく😎.
+  final outputList = <String>[];
   for (var pickedMessage in targetMessages) {
     if (pickedMessage is types.TextMessage) {
       final textList = pickedMessage.text.split('\n'); // 本家さまで読めるように複数行のテキストを分割する.
       for (var pickedText in textList) {
-        final oneLine = '${pickedMessage.author.firstName}(${pickedMessage.author.lastName}),$pickedText';
-        print('${DateTime.now().millisecondsSinceEpoch}🤔$oneLine');
-        outputList.add(oneLine);
+        final compatibleText = '${pickedMessage.author.firstName}(${pickedMessage.author.lastName}),$pickedText';
+        print('${DateTime.now()}🤔$compatibleText');
+        outputList.add(compatibleText);
       }
     }
   }
