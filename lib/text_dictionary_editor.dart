@@ -197,9 +197,14 @@ Future<String> convertTextToSerif(String text) async {
     if (pickedItem.before == '') {
       continue;
     }
-    text = text.replaceAll(RegExp(pickedItem.before), pickedItem.after); // 単語優先度？😌最高だ.
-    print('${DateTime.now()}置換しました😊$text');
+    try {
+      text = text.replaceAll(RegExp(pickedItem.before), pickedItem.after); // 単語優先度？😌最高だ.
+    } catch (e) {
+      await Fluttertoast.showToast(msg: '${pickedItem.before}\nは不正な正規表現です😫');
+      print('キャッチ🤗 $e');
+    }
   }
+  print('${DateTime.now()}置換しました😊$text');
   return text;
 }
 
