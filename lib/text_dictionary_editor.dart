@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -40,10 +39,10 @@ class _TextDictionaryEditWindowState extends State<TextDictionaryEditWindow> {
   void _orderLoadTextDictionary() async {
     // ↓ローカルにできるやん🤬😡😌入力欄の表示に必須な2つのTextEditingControllerリストだけ考えればOK.
     final loadedTextDictionary = await loadTextDictionary();
-    for (var i = 0; i <= loadedTextDictionary.length - 1; i++) {
+    for (var pickedItem in loadedTextDictionary) {
       setState(() {
-        beforeControllers.add(TextEditingController(text: loadedTextDictionary[i].before));
-        afterControllers.add(TextEditingController(text: loadedTextDictionary[i].after));
+        beforeControllers.add(TextEditingController(text: pickedItem.before));
+        afterControllers.add(TextEditingController(text: pickedItem.after));
       });
       // ここに1sec待機入れると順番に表示されていくのが見える。つまりinitState完了後に画面遷移ではないっぽい。asyncやしね.
       // ループ後にsetStateでは極端に項目数が多いとなかなか表示されなくなりそう.
@@ -56,6 +55,7 @@ class _TextDictionaryEditWindowState extends State<TextDictionaryEditWindow> {
       builder: (_) => HamburgerMenuForTextDictionary(
         onExportDictionaryPressed: _showDictionaryExportView,
         onImportDictionaryPressed: _letsImportDictionary,
+        onDeduplicatePressed: _deduplicateItems,
       ),
     );
   }
@@ -67,9 +67,9 @@ class _TextDictionaryEditWindowState extends State<TextDictionaryEditWindow> {
     }
     final exportingText = jsonEncode(exportingDictionary);
     showAlterateOfKakidashi(context, exportingText);
-    Clipboard.setData(ClipboardData(text: exportingText)); // 長文は長押しでコピーしてくれない場合があるので勝手にやる😩.
   }
 
+  // 辞書インポート機能。どんなJSONが入ってくるかまるでチェックしてないけどヨシ！😸.
   void _letsImportDictionary() async {
     final whatYouInputed = await showEditingDialog(context, 'ずんだ');
     // ↕時間経過あり。今回はそんな関係ないけど.
@@ -79,7 +79,7 @@ class _TextDictionaryEditWindowState extends State<TextDictionaryEditWindow> {
     }
     try {
       final additionalDictionaryAsDynamic = await json.decode(whatYouInputed); // JSONでない場合ここで例外.
-      for (var pickedItem in additionalDictionaryAsDynamic) {
+      for (var pickedItem in additionalDictionaryAsDynamic.reversed) {
         setState(() {
           beforeControllers.insert(0, TextEditingController(text: pickedItem['before']));
           afterControllers.insert(0, TextEditingController(text: pickedItem['after']));
@@ -90,7 +90,26 @@ class _TextDictionaryEditWindowState extends State<TextDictionaryEditWindow> {
       return;
     }
     await Fluttertoast.showToast(msg: '😹インポートに成功しました！！！');
-  } // どんなJSONが入ってくるかまるでチェックしてないけどヨシ！😸.
+  }
+
+  // 重複削除機能。処理中に編集されると非常にマズいけど超高速なので問題ナシ！.
+  void _deduplicateItems() {
+    final beforeLengthBackup = beforeControllers.length;
+
+    // リスト内包表記。4行を1行にするすばらしいギミック。明日の自分に理解できるかは疑問符.
+    final beforeCopies = [for (var pickedItem in beforeControllers) pickedItem.text];
+    for (var i = beforeCopies.length - 1; i >= 0; i--) {
+      if (beforeCopies[i] == '') {
+        continue; // Beforeを空欄にしてAfterにメモを書く使い方をしているので削除しない😶‍🌫️.
+      }
+      if (beforeCopies.indexWhere((element) => element == beforeCopies[i]) != i) {
+        print('${DateTime.now()}🤯${beforeCopies[i]}は重複しているので排除します');
+        _deleteItem(i);
+        beforeCopies.removeAt(i);
+      }
+    }
+    Fluttertoast.showToast(msg: '😇${beforeLengthBackup - beforeControllers.length}個の項目を削除しました！');
+  }
 
   void _deleteItem(int index) {
     setState(() {
@@ -133,27 +152,30 @@ class _TextDictionaryEditWindowState extends State<TextDictionaryEditWindow> {
             onAddTap: _addNewItem,
             onHamburgerPress: _handleHamburgerPressed,
           ),
-          body: ListView.builder(
-            itemCount: beforeControllers.length,
-            itemBuilder: (context, index) => Row(
-              children: [
-                const SizedBox(width: 15), // 画面左端の余白はここ.
-                Expanded(
-                  child: TextFormField(
-                    controller: beforeControllers[index],
+          body: Scrollbar(
+            radius: const Radius.circular(10),
+            child: ListView.builder(
+              itemCount: beforeControllers.length,
+              itemBuilder: (context, index) => Row(
+                children: [
+                  const SizedBox(width: 15), // 画面左端の余白はここ.
+                  Expanded(
+                    child: TextFormField(
+                      controller: beforeControllers[index],
+                    ),
                   ),
-                ),
-                const Icon((Icons.navigate_next_rounded)),
-                Expanded(
-                  child: TextFormField(
-                    controller: afterControllers[index],
+                  const Icon((Icons.navigate_next_rounded)),
+                  Expanded(
+                    child: TextFormField(
+                      controller: afterControllers[index],
+                    ),
                   ),
-                ),
-                IconButton(
-                  onPressed: () => _deleteItem(index),
-                  icon: const Icon(Icons.delete_rounded),
-                ),
-              ],
+                  IconButton(
+                    onPressed: () => _deleteItem(index),
+                    icon: const Icon(Icons.delete_rounded),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -272,10 +294,12 @@ class HamburgerMenuForTextDictionary extends StatelessWidget {
     super.key,
     this.onExportDictionaryPressed,
     this.onImportDictionaryPressed,
+    this.onDeduplicatePressed,
   });
 
   final VoidCallback? onExportDictionaryPressed;
   final VoidCallback? onImportDictionaryPressed;
+  final VoidCallback? onDeduplicatePressed;
 
   @override
   Widget build(BuildContext context) => SimpleDialog(
@@ -294,6 +318,13 @@ class HamburgerMenuForTextDictionary extends StatelessWidget {
             child: const ListTile(
               leading: Icon(Icons.exit_to_app_rounded),
               title: Text('辞書を読み込む（.json）'),
+            ),
+          ),
+          SimpleDialogOption(
+            onPressed: onDeduplicatePressed,
+            child: const ListTile(
+              leading: Icon(Icons.layers_clear_rounded),
+              title: Text('重複を削除する'),
             ),
           ),
         ],
