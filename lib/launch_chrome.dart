@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
+import 'package:fluttertoast/fluttertoast.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 
@@ -71,4 +72,32 @@ List<types.Message> combineMessagesFromJson(String? jsonText, List<types.Message
   updatedMessages.addAll(beforeMessages);
 
   return updatedMessages;
-}// こんなんで動くんでしょうか？私はそうは思わにあ😹←←まったくもってそうですね.
+} // こんなんで動くんでしょうか？私はそうは思わにあ😹←←まったくもってそうですね.
+
+// 長文を分割する関数。ちなみにAPIは1250文字あたりでtextTooLongエラー。快適な分割アルゴリズムは要研究.
+List<String> splitTextIfLong(String text) {
+  // 短文の場合は分割しない.
+  if (text.length < 1000) {
+    return [text]; // こんなチープな記述でええんかいな.
+  }
+
+  Fluttertoast.showToast(msg: '👺長すぎます！');
+
+  // 分割したい位置に\nを追加しておく。↓の基準はやり過ぎだったのでコメントアウトした.
+  // text = text.replaceAll('。', '。\n'); // 句点で改行する。.
+  // text = text.replaceAll(RegExp(r'\. '), '.\n'); // ピリオドで改行する。小数点などの考慮が必要.
+
+  final splittedTexts = text.split('\n');
+  // それでも各インデックスが長文の場合、思い切ってカットしてしまう.
+  for (var i = 0; i <= splittedTexts.length - 1; i++) {
+    if (splittedTexts[i].length > 1010) {
+      splittedTexts[i] = splittedTexts[i].substring(0, 1000); // 文字列が存在する必要がある。厳格や.
+    }
+  }
+  for (var i = splittedTexts.length - 1; i >= 0; i--) {
+    if (splittedTexts[i] == '') {
+      splittedTexts.removeAt(i);
+    }
+  }
+  return splittedTexts;
+}
