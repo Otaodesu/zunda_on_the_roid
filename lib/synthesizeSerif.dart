@@ -5,101 +5,162 @@ import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:just_audio/just_audio.dart';
 
-// ビルドしてapkにするとしゃべらない時は 『Android でインターネットに接続するためのパーミッションを設定する』かも.
+// .apkにビルドすると喋らなくなるなら『Android でインターネットに接続するためのパーミッションを設定する』かも.
 
-// 音声合成にはsu-shiki.comさんの『WEB版VOICEVOX API（低速）』を利用させていただきます。便利なサービスを提供してくださり本当にありがたい限りです！😘.
-Future<Map<String, dynamic>> synthesizeSerif({required String serif, int? speakerId}) async {
-  // 1250文字あたりでtextTooLongとお叱りを受けるので思い切ってカットしてしまう.
-  if (serif.length > 1010) {
-    serif = serif.substring(0, 1000);
-    await Fluttertoast.showToast(msg: '👺長すぎます！');
-  } // 文字列が存在する必要があるのでチェック。厳格や.
+class NewSuperSynthesizer {
+  // これもコンストラクタ。インスタンス生成時に実行される.
+  NewSuperSynthesizer() {
+    _initialize();
+  }
 
-  final requestUrl =
-      'https://api.tts.quest/v3/voicevox/synthesis?speaker=$speakerId&text=${Uri.encodeComponent(serif)}';
-  print('音声合成をオーダーするURLは$requestUrl');
+  final _playlistPlayer = AudioPlayer();
+  final _playlist = ConcatenatingAudioSource(children: []);
 
-  var responceBodyMapped = <String, dynamic>{'デフォルト': '中身'};
-  const erroredMap = {
-    'success': 'false',
-    'errorMessage': '何かしらのエラーです！😰',
-  }; // エラー発生時はとりまこれ返してみる.
+  // チャット画面の送信順=orderWaitingList=playlistAddWaitingListになるように制御する😦.
+  final _orderWaitingList = <DateTime>[];
+  final _playlistAddWaitingList = <DateTime>[];
 
-  // 音声合成オーダーを出す。連続でオーダーを出すとretryAfter秒待てと言われるのでリトライする.
-  for (var i = 0; i < 5; i++) {
+  // 😆mainから見える唯一のメソッド.
+  Future<Map<String, dynamic>> synthesizeSerif({required String serif, int? speakerId}) async {
+    // 順番待ちシステム。改造後に合成できなくなったらまず疑うこと😹.
+    final registrationTime = DateTime.now(); // オーダーが通ったら必ず自分のIDを消しましょう！！😹😹😹.
+    _orderWaitingList.add(registrationTime);
+    while (_orderWaitingList[0] != registrationTime) {
+      await Future.delayed(const Duration(seconds: 1));
+    }
+
+    // 音声合成にはsu-shiki.comさんの『WEB版VOICEVOX API（低速）』を利用させていただきます。便利なサービスを提供してくださり本当にありがたい限りです！😘.
+    final requestUrl =
+        'https://api.tts.quest/v3/voicevox/synthesis?speaker=$speakerId&text=${Uri.encodeComponent(serif)}';
+    print('😘音声合成をオーダーするURLは$requestUrl');
+
+    var responceBodyMapped = <String, dynamic>{'デフォルト': true}; // メイン側のmappedAudioURLs.
+
+    // 音声合成オーダーを出す。連続でオーダーを出すとretryAfter秒待てと言われるのでリトライする.
+    for (var retry = 1; retry < 6; retry++) {
+      responceBodyMapped = await _accessAPI(requestUrl); // これだけでオーダー出せるようにした😎.
+
+      if (responceBodyMapped['mp3DownloadUrl'] != null) {
+        print('😋MP3ダウンロードURLが判明！ ${responceBodyMapped['mp3DownloadUrl']}です');
+        break;
+      } else if (responceBodyMapped['retryAfter'] is int) {
+        print('😴retryAfterのため${responceBodyMapped['retryAfter'] + retry}秒待ちます');
+        await Future.delayed(Duration(seconds: responceBodyMapped['retryAfter'] + retry));
+        continue;
+      }
+      await Future.delayed(const Duration(seconds: 2));
+    }
+    _orderWaitingList.removeAt(0); // オーダーを出したので順番を進める😸😸😸
+
+    // それでもオーダーが受理されなかった場合はここでmainに帰る.
+    if (responceBodyMapped['mp3DownloadUrl'] == null) {
+      return responceBodyMapped;
+    }
+
+    // AudioCountを取得する。すぐアクセスすると0と返ってくるのでリトライする.
+    var audioStatusMapped = <String, dynamic>{'デフォルト': true};
+    for (var retry = 1; retry < 100; retry++) {
+      audioStatusMapped = await _accessAPI(responceBodyMapped['audioStatusUrl']);
+
+      if (audioStatusMapped['audioCount'] > 0) {
+        print('😋audioCountが判明！${audioStatusMapped['audioCount']}です');
+        break;
+      } else if (audioStatusMapped['isAudioError'] == true) {
+        return audioStatusMapped; // 絵文字だけのオーダーは合成エラー。ここでmainに帰る.
+      }
+      print('😴まだaudioCount=0なので$retry秒待ちます');
+      await Future.delayed(Duration(seconds: retry));
+    }
+
+    // それでもaudioCountが取得できなかった場合はここでmainに帰る.
+    if (audioStatusMapped['audioCount'] == null) {
+      return audioStatusMapped;
+    }
+
+    await _atohaMakasero(
+      mp3DownloadUrl: responceBodyMapped['mp3DownloadUrl'],
+      audioCount: audioStatusMapped['audioCount'],
+      registrationTime: registrationTime,
+    );
+
+    print('😊${DateTime.now()} 順番待ちId「$registrationTime」の合成完了！synthesizeSerifメソッドを終了するよ');
+    return responceBodyMapped;
+  }
+
+  // 😋合成待ちフェーズと再生フェーズ。mainへのフィードバックに不要な部分なので分けてみた。分けんくてよかった？.
+  Future<void> _atohaMakasero({
+    required String mp3DownloadUrl,
+    required int audioCount,
+    required DateTime registrationTime,
+  }) async {
+    // プレイリスト追加を順番待ちする。このタイミングで待ち始めるということはaudioCountが準備できた順番とorderWaitingListが（偶然）一致していることが前提になる🙀.
+    _playlistAddWaitingList.add(registrationTime); // あとで必ず解除すること！！😹😹😹途中でreturn設けるときは注意👺.
+    while (_playlistAddWaitingList[0] != registrationTime) {
+      await Future.delayed(const Duration(seconds: 1));
+    }
+
+    final mp3AudioCountableUrl = mp3DownloadUrl.replaceFirst('audio.mp3', ''); // "数字.mp3" を後付けできるURLを作る.
+
+    // 一定の割合が合成完了するまで待つ。追いつくことがあるので🐇.
+    const synthesizeWaitRatio = 0.4; // 割合はここ。再生が不安定なら増やしてみて.
+    for (var retry = 1; retry < 20; retry++) {
+      final halfAudioCount = ((audioCount - 1) * synthesizeWaitRatio).round(); // カウント=1の時は0.mp3まで。リストと同様.
+      if (await _checkAudioUrlPlayable('$mp3AudioCountableUrl$halfAudioCount.mp3')) {
+        print('😋${synthesizeWaitRatio * 100}％合成完了しました！プレイリスト追加へ進みます');
+        break;
+      } else {
+        print('😴まだ${synthesizeWaitRatio * 100}％地点は再生できないので$retry秒待ちます');
+        await Future.delayed(Duration(seconds: retry));
+      }
+    }
+
+    await _playlistPlayer.play(); // すでにplay中でも、リストが空でも.play可能.
+
+    // 確認次第じゃんじゃんプレイリストに追加していく.
+    for (var i = 0; i <= audioCount - 1; i++) {
+      for (var retry = 1; retry < 10; retry++) {
+        if (await _checkAudioUrlPlayable('$mp3AudioCountableUrl$i.mp3')) {
+          await _playlist.add(AudioSource.uri(Uri.parse('$mp3AudioCountableUrl$i.mp3')));
+          print('😆playlistに追加しました。lastIndexは[${_playlist.length - 1}]、[${_playlistPlayer.currentIndex}]を再生中');
+          break;
+        } else {
+          print('😴まだ再生できないので$retry秒待ちます');
+          await Future.delayed(Duration(seconds: retry));
+        }
+      }
+    }
+
+    print('🥰全ACのプレイリストへの追加が完了しました');
+    _playlistAddWaitingList.removeAt(0); // 追加が完了したので順番を進める😸😸😸.
+  }
+
+  // 😎HTTPリクエスト(GET)を出す。エラーならerroredMapを返す.
+  Future<Map<String, dynamic>> _accessAPI(String url) async {
     try {
-      // 『DartでHTTPリクエストを送信する』より。おぶじぇくとを作る.
-      final requestObject = await HttpClient().getUrl(Uri.parse(requestUrl));
-      final responce = await requestObject.close();
-      final responceBodyText = await utf8.decodeStream(responce);
-      print('レスポンスJSONは$responceBodyText');
-      // PADでいうところのカスタムオブジェクトに変換。『【Flutter】JSONをデコードする』より.
-      responceBodyMapped = json.decode(responceBodyText);
-    } catch (e) {
-      return erroredMap; // ネット未接続だと例外発生.
-    }
-
-    if (responceBodyMapped['retryAfter'] is num) {
-      // 変数のスコープってなんだ。intって127までしか入らなくないか？.
-      int waitBeforeRetrySecond = responceBodyMapped['retryAfter'];
-      waitBeforeRetrySecond = waitBeforeRetrySecond + 5;
-      print('retryAfterのため$waitBeforeRetrySecond秒待ちます');
-      await Future.delayed(Duration(seconds: waitBeforeRetrySecond));
-    } else {
-      print('MP3ダウンロードURLは ${responceBodyMapped['mp3DownloadUrl']}');
-      break;
-    }
-  }
-
-  // リトライ回数内にオーダーが受理されなかった場合はここで抜ける.
-  if (responceBodyMapped['mp3DownloadUrl'] == null) {
-    return erroredMap;
-  }
-
-  // ここから合成待ちフェーズ。audioCountを利用して全体の合成が完了する前に追っかけ再生する😤.
-
-  // AudioCountを取得する。すぐアクセスすると0と返ってくるのでリトライする.
-  var audioStatusMapped = {};
-  for (var i = 0; i < 100; i++) {
-    try {
-      final requestObject = await HttpClient().getUrl(Uri.parse(responceBodyMapped['audioStatusUrl']));
-      final responce = await requestObject.close();
-      final responceBodyText = await utf8.decodeStream(responce);
-      print('レスポンスJSONは$responceBodyText');
-      audioStatusMapped = json.decode(responceBodyText);
-    } catch (e) {
-      return erroredMap; // ネット未接続だと例外発生.
-    }
-
-    if (audioStatusMapped['audioCount'] > 0) {
-      break;
-    }
-    if (audioStatusMapped['isAudioError'] == true) {
-      return erroredMap; // 絵文字だけのオーダーはエラーになる.
-    }
-    print('🤗まだaudioCount=0なので待ちます');
-    await Future.delayed(const Duration(seconds: 2));
-  }
-  print('😋${DateTime.now()}audioCountは${audioStatusMapped['audioCount']}です！');
-  if (audioStatusMapped['audioCount'] == null) {
-    return erroredMap;
-  }
-  final audioCount = audioStatusMapped['audioCount']; // 後からfinalに変えられるならそうしたい.
-
-  // "数字.mp3" を後付けできるURLを作る.
-  final mp3AudioCountableUrl = responceBodyMapped['mp3DownloadUrl'].toString().replaceFirst('audio.mp3', '');
-  print('カウントしやすくしたURLは$mp3AudioCountableUrlです');
-
-  // 関数内の関数.
-  Future<bool> checkAudioUrlPlayable(String url) async {
-    try {
+      // おぶじぇくとを作る。『DartでHTTPリクエストを送信する』より.
       final requestObject = await HttpClient().getUrl(Uri.parse(url));
+      final responce = await requestObject.close();
+      final responceBodyText = await utf8.decodeStream(responce);
+      print('🎃${DateTime.now()} レスポンスJSONは$responceBodyText');
+      // PADでいうところのカスタムオブジェクトに変換。『【Flutter】JSONをデコードする』より.
+      final responceBodyMapped = json.decode(responceBodyText);
+      return responceBodyMapped;
+    } catch (e) {
+      // ネット未接続だと例外発生.
+      return {'success': false, 'errorMessage': '何かしらのエラーです！😰$e'}; // 一応APIエラー時のパロディ仕様.
+    }
+  }
+
+  // 🧐再生できるかチェックする。関数内の関数がクラス内のプライベートメソッドに昇格。中身同じでもゴージャスに聞こえる.
+  Future<bool> _checkAudioUrlPlayable(String mp3Url) async {
+    try {
+      final requestObject = await HttpClient().getUrl(Uri.parse(mp3Url));
       final response = await requestObject.close(); // れすぽんせ.
       if (response.statusCode == 200) {
-        print('🤖$url は再生できマス');
+        print('🤖${DateTime.now()} $mp3Url は再生できマス');
         return true;
       } else {
-        print('👻まだ$url は再生できません！ステースタスコード${response.statusCode}');
+        print('👻${DateTime.now()} まだ$mp3Url は再生できません！ステースタスコード${response.statusCode}');
         return false;
       }
     } catch (e) {
@@ -108,88 +169,15 @@ Future<Map<String, dynamic>> synthesizeSerif({required String serif, int? speake
     }
   }
 
-  // 一定の割合が合成完了するまで待つ。追いつくことがあるので🐇.
-  const synthesizeWaitRatio = 0.4; // 割合はここ。再生が不安定なら増やしてみて.
-  for (var i = 0; i < 100; i++) {
-    final halfAudioCount = ((audioCount - 1) * synthesizeWaitRatio).round(); // カウント=1の時は0.mp3まで。リストと同様.
-    final isHalfPlayable = await checkAudioUrlPlayable('$mp3AudioCountableUrl$halfAudioCount.mp3');
-    if (isHalfPlayable) {
-      print('😋${DateTime.now()}比率$synthesizeWaitRatioまで合成完了しました');
-      break;
-    } else {
-      print('🤗まだaudioCount x$synthesizeWaitRatio =$halfAudioCountは再生できないので待ちます');
-      await Future.delayed(const Duration(seconds: 2));
-    }
+  // 😚このクラスのインスタンスが作成されたとき動かす初期化処理.
+  void _initialize() async {
+    // .setAudioSourceするたびリスト先頭に戻るため1回だけ行う.
+    await _playlistPlayer.setAudioSource(
+      _playlist,
+    );
   }
-
-  // ここから再生フェーズ。ジェットコースターでいうとファーストドロップ.
-
-  // 公式pub.devのReadme #Working with gapless playlists.
-  final playlist = ConcatenatingAudioSource(
-    useLazyPreparation: true,
-    children: [],
-  );
-  for (var i = 0; i <= audioCount - 1; i++) {
-    await playlist.add(AudioSource.uri(Uri.parse('$mp3AudioCountableUrl$i.mp3')));
-  }
-
-  final playlistPlayer = AudioPlayer();
-  await playlistPlayer.setAudioSource(
-    playlist,
-    preload: false,
-  );
-
-  // プレーヤーをみはr…見守るStreamSubscriptionを仕掛ける.
-  playlistPlayer.currentIndexStream.listen((playingIndex) async {
-    print('😸${DateTime.now()}再生インデックスは$playingIndex'); // 最初はnullになる.
-    if (playingIndex != null) {
-      // 未来のAudioCountが再生可能かチェックする。バッファが切れてからだとポーズできないっぽいため.
-      const sakiyomiDistance = 2; // 単語がスキップされる場合は増やしてみて。毎回constしてるがええんか？.
-      if (playingIndex + sakiyomiDistance <= audioCount - 1) {
-        final sakiyomiAudioUrl = '$mp3AudioCountableUrl${playingIndex + sakiyomiDistance}.mp3';
-        // 🙄プレイリストのindexとi.mp3の同期が前提.
-        final isSakiyomiPlayable = await checkAudioUrlPlayable(sakiyomiAudioUrl);
-        if (!isSakiyomiPlayable) {
-          print('🙊${DateTime.now()}じゃあポーズしますよ');
-          await playlistPlayer.pause();
-
-          for (var i = 0; i < 25; i++) {
-            await Future.delayed(const Duration(seconds: 3)); // 再開後即止まるなら増やしてみて.
-            if (await checkAudioUrlPlayable(sakiyomiAudioUrl)) {
-              break;
-            }
-          }
-
-          print('😹${DateTime.now()}再開しますよ～');
-          await playlistPlayer.play();
-        }
-      } // ↑halfAudioCountまでは重複チェックしてるけどまいっか.
-    }
-    // print('ちなみに最終ACは${await checkAudioUrlPlayable('$mp3AudioCountableUrl${audioCount - 1}.mp3')}'); // 実験用。チューニングに使いやがれ.
-  });
-
-  // こっちは再生完了を見張る。画期的やけど不思議な動き方や😣.
-  var isPlaylistPlayerFinished = false;
-  playlistPlayer.processingStateStream.listen((state) {
-    if (state == ProcessingState.completed) {
-      print('🐶再生完了だってよ');
-      isPlaylistPlayerFinished = true;
-    }
-  });
-
-  await playlistPlayer.play();
-
-  // ポーズやストップするとawaitを突破するのでここで待つ。長文が途中で完了する場合は伸ばしてみて.
-  for (var i = 0; i <= 500; i++) {
-    await Future.delayed(const Duration(seconds: 1));
-    if (isPlaylistPlayerFinished) {
-      break;
-    }
-  }
-
-  print('たぶん合成成功! synthesizeSerif関数を終了するよ');
-  return responceBodyMapped;
 }
+// （下ほど新しいコメント）.
 // ↑mp3StreamingUrlを使うと英単語の多い文において（たぶん合成が追いつかず）先頭から再生をやり直すことがある.
 // このとき例外は発生していないので、.play()メソッド内でリトライが起きているのだと思う.
 // セリフ中のアルファベットの数に応じてウェイトを設けることで対策するとか？🤨.
@@ -217,10 +205,14 @@ Future<Map<String, dynamic>> synthesizeSerif({required String serif, int? speake
 // かくしてgapless playlists + 先読み再生可能チェック + 再生中ポーズにたどり着いたのである（「のだ」はミーム汚染のため回避）.
 // ポーズ前とポーズ中で先読みdistanceを変えるとよりインテリジェントやね.
 // 読み方辞書機能によって安定性低下の要因である英単語のスペル読みが解消（できるようになった）。じゃんじゃん登録しよう！！.
+// クラス化すればプレイリストが空になってもplayerオブジェクトはクラス変数として保持されているので好きなタイミングでプレイリストに追加すれば再生される！Streamなんていらんかったんや！.
+// .setAudioSourceするとその都度[0]から再生になる（?付き引数になっている）.
+// プレイリストが空のとき.playするとプレイリストに追加されるまで待つモードになる。アプリの外からは再生中として扱われるので待ちかねてYouTube見始めると追加しても鳴り始めない.
+// 順番待ちシステムができた！長文分割投稿システムとのシナジー効果大爆発（WaitingListの制御から目をそらしながら）.
 
 // メッセージ再再生関連を一挙に制御するクラス作ったった！.
 class AudioPlayManager {
-  List<AudioPlayer> _playerObjects = []; // 連打に対応するため複数のプレーヤーを作り出すようにした.
+  List<AudioPlayer> _playerObjects = []; // 連打に対応するため複数のプレーヤーインスタンスを格納する.
 
   // メッセージ単発を再生するメソッド。連打できることは何より大事🫨.
   Future<bool> playFromMessage(types.Message message) async {
