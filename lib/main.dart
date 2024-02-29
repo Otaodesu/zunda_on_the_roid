@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show Clipboard, ClipboardData, rootBundle;
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
 import 'package:flutter_chat_ui/flutter_chat_ui.dart';
 import 'package:fluttertoast/fluttertoast.dart';
@@ -54,7 +54,7 @@ class _ChatPageState extends State<ChatPage> {
   // このタイミングもまねしただけ。ファイルの直下が[]だからListなんかな？Mapと思ったけど動かん.
   List _charactersDictionary = [];
 
-  // 誰が投稿するのかはこのフォーマットで決める。デフォルトの話者はここ.
+  // 誰が投稿するのかはこのフォーマットで決める。起動直後の話者はここ.
   var _user = const types.User(
     id: '388f246b-8c41-4ac1-8e2d-5d79f3ff56d9',
     firstName: 'デフォルトスピーカー', // 追加した.
@@ -62,7 +62,8 @@ class _ChatPageState extends State<ChatPage> {
     updatedAt: 3, // これがspeakerId😫 スタイル違いも右に表示するにはこれしかなかったんだ…！.
   ); // 後から変更したいプロパティは必須プロパティでなくても初期化が必要だとわかった.
 
-  AudioPlayManager playerKun = AudioPlayManager(); // プレーヤーくん爆誕.以後は彼に頼んでください.
+  AudioPlayManager playerKun = AudioPlayManager(); // プレーヤーくん爆誕。以後は彼に頼んでください.
+  NewSuperSynthesizer synthesizerChan = NewSuperSynthesizer(); // シンセサイザーちゃんも爆誕。特に対応関係とかはないです.
 
   @override
   void initState() {
@@ -152,11 +153,14 @@ class _ChatPageState extends State<ChatPage> {
         child: SizedBox(
           // SizedBoxで領域を指定してその中全面にSingleChildScrollViewを表示する。よくできてる！(カッコがやばい).
           height: MediaQuery.of(context).size.height * 0.8,
-          child: SingleChildScrollView(
-            // 最上段に突き当たると自動で閉じてほしい欲が出てくるが難しいっぽい.
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: textButtons, // 上で準備したリストを表示する.
+          child: Scrollbar(
+            radius: const Radius.circular(10),
+            child: SingleChildScrollView(
+              // 最上段に突き当たると自動で閉じてほしい欲が出てくるが難しいっぽい.
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: textButtons, // 上で準備したリストを表示する.
+              ),
             ),
           ),
         ),
@@ -441,16 +445,19 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   // 送信ボタン押すときここが動く.
-  void _handleSendPressed(types.PartialText message) {
-    final textMessage = types.TextMessage(
-      author: _user,
-      createdAt: DateTime.now().millisecondsSinceEpoch,
-      id: const Uuid().v4(),
-      text: message.text,
-    );
-
-    _addMessage(textMessage); // この関数で画面更新するので合成リクエストの受理を待てない.
-    _synthesizeFromMessage(textMessage); // これだけで合成できちゃうなら再合成も楽ちんになるぞ～.
+  void _handleSendPressed(types.PartialText message) async {
+    final splittedTexts = splitTextIfLong(message.text); // もともとPartialText.text以外投稿に反映されてないからいいよね😚.
+    for (var pickedText in splittedTexts) {
+      final textMessage = types.TextMessage(
+        author: _user,
+        createdAt: DateTime.now().millisecondsSinceEpoch,
+        id: const Uuid().v4(),
+        text: pickedText,
+      );
+      _addMessage(textMessage);
+      _synthesizeFromMessage(textMessage); // これだけで合成できちゃうぞ～.
+      await Future.delayed(const Duration(milliseconds: 500)); // 演出.
+    }
   }
 
   // 音声合成する。TextMessage型を渡せば合成の準備から完了後の表示変更まですべてサポート！.
@@ -459,17 +466,14 @@ class _ChatPageState extends State<ChatPage> {
 
     // 合成中とわかる表示に更新する.
     final index = _messages.indexWhere((element) => element.id == targetMessageId);
-    final updatedMessage = (_messages[index] as types.TextMessage).copyWith(
-      status: types.Status.sending,
-    );
+    final updatedMessage = (_messages[index] as types.TextMessage).copyWith(status: types.Status.sending);
     setState(() {
       _messages[index] = updatedMessage;
     });
 
     final serif = await convertTextToSerif(message.text); // 読み方辞書を適用して置換する.
 
-    // ここでsynthesizeSerif.dartを呼び出す。各ダウンロードURLが入ったマップが返ってくるはず.
-    final synthesizeResponce = await synthesizeSerif(
+    final synthesizeResponce = await synthesizerChan.synthesizeSerif(
       serif: serif,
       speakerId: message.author.updatedAt,
     );
@@ -504,14 +508,13 @@ class _ChatPageState extends State<ChatPage> {
     print('😆$targetMessageIdの音声合成が正常に完了しました!');
   }
 
-  // User型じゃないといかん。後からどうやって話者変えようか.
+  // User型しか入ってこない。さあどうしよう.
   void _handleAvatarTap(types.User tappedUser) {
     print('$tappedUserのアイコンがタップされました');
-    _user = tappedUser;
     setState(() {
-      _messages = _messages;
+      _user = tappedUser;
     });
-    // アイコンタップでそのセリフの話者を変更するのが期待動作。そんなんわかっとるわい🤧！.
+    // 期待するのは本家VOICEVOXと同じ動作。そんなんわかっとるわい🤧！.
     // でも直近に使ったスタイルをすぐ取り出せるから便利では？ほらほら.
   }
 
@@ -551,9 +554,6 @@ class _ChatPageState extends State<ChatPage> {
       context,
       exportingText,
     );
-    // 長押しでコピーしてくれない場合があるので勝手にやる😩『【Flutter】クリップボードにコピーする』.
-    final data = ClipboardData(text: exportingText);
-    Clipboard.setData(data);
   }
 
   // テキストのエクスポート.
@@ -564,7 +564,6 @@ class _ChatPageState extends State<ChatPage> {
       context,
       exportingText,
     );
-    Clipboard.setData(ClipboardData(text: exportingText));
   }
 
   // プロジェクトのインポート.
