@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
+import 'package:fluttertoast/fluttertoast.dart';
+import 'package:share_plus/share_plus.dart';
 
 // 言い訳: UIはどんどん込み入ってくると分かったので実際の処理と別にしたほうが理解しやすいかもと思ったんです.
 
@@ -210,22 +213,41 @@ class AlterateOfKakidashi extends StatelessWidget {
   final String whatYouWantShow;
   final String whatYouWantSetTitle;
 
+  void _saveOnClipboard() async {
+    await Clipboard.setData(ClipboardData(text: whatYouWantShow));
+    await Fluttertoast.showToast(msg: 'クリップボードにコピーしました');
+  }
+
   @override
-  Widget build(BuildContext context) => SimpleDialog(
-        title: Text(whatYouWantSetTitle),
+  Widget build(BuildContext context) => AlertDialog(
+        title: Text(
+          whatYouWantSetTitle,
+          overflow: TextOverflow.fade,
+          softWrap: false,
+        ),
         surfaceTintColor: Colors.green,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: SelectableText(
-              whatYouWantShow,
-              showCursor: true,
-              style: const TextStyle(fontSize: 15),
+        content: SelectableText(
+          whatYouWantShow,
+          style: const TextStyle(fontSize: 15),
+        ),
+        actions: [
+          Tooltip(
+            message: 'すべてコピーする',
+            child: IconButton(
+              onPressed: _saveOnClipboard,
+              icon: const Icon(Icons.copy_rounded),
+            ),
+          ),
+          Tooltip(
+            message: '全文を共有する',
+            child: IconButton(
+              onPressed: () => Share.share(whatYouWantShow, subject: '$whatYouWantSetTitle.json'),
+              icon: const Icon(Icons.share_rounded),
             ),
           ),
         ],
       );
-}
+} // GoogleKeepへの保存やコピー機能を搭載したがそういう処理はここに書かないはずだったのでは…？🤔.
 
 // ↑の書き出し代替ダイアログを呼び出す関数.
 void showAlterateOfKakidashi(
@@ -303,10 +325,7 @@ class _TextEditingDialogState extends State<TextEditingDialog> {
 }
 
 // ↑の入力ダイアログを呼び出す関数.
-Future<String?> showEditingDialog(
-  BuildContext context,
-  String text,
-) async {
+Future<String?> showEditingDialog(BuildContext context, String text) async {
   final whatYouImputed = await showDialog<String>(
     context: context,
     builder: (context) => TextEditingDialog(text: text),
