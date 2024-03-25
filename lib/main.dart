@@ -15,6 +15,7 @@ import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
+import 'favorability_gauge.dart';
 import 'launch_chrome.dart';
 import 'synthesizeSerif.dart'; // これで自作のファイルを行き来できるみたい.
 import 'text_dictionary_editor.dart';
@@ -51,8 +52,8 @@ class ChatPage extends StatefulWidget {
 class _ChatPageState extends State<ChatPage> {
   List<types.Message> _messages = [];
 
-  // このタイミングもまねしただけ。ファイルの直下が[]だからListなんかな？Mapと思ったけど動かん.
-  List _charactersDictionary = [];
+  List<Widget> _characterSelectButtons = []; // 話者選択ボタンを格納する.
+  // _charaDicをここに保持しない仕様にしたが、おそらくまた必要になるしわかりにくくなった説もある😐.
 
   // 誰が投稿するのかはこのフォーマットで決める。起動直後の話者はここ.
   var _user = const types.User(
@@ -62,90 +63,28 @@ class _ChatPageState extends State<ChatPage> {
     updatedAt: 3, // これがspeakerId😫 スタイル違いも右に表示するにはこれしかなかったんだ…！.
   ); // 後から変更したいプロパティは必須プロパティでなくても初期化が必要だとわかった.
 
-  AudioPlayManager playerKun = AudioPlayManager(); // プレーヤーくん爆誕。以後は彼に頼んでください.
-  NewSuperSynthesizer synthesizerChan = NewSuperSynthesizer(); // シンセサイザーちゃんも爆誕。特に対応関係とかはないです.
+  final playerKun = AudioPlayManager(); // プレーヤーくん爆誕。以後は彼に頼んでください.
+  final synthesizerChan = NewSuperSynthesizer(); // シンセサイザーちゃんも爆誕。特に対応関係とかはないです.
 
   @override
   void initState() {
     super.initState();
     _loadMessages();
-    _loadCharactersDictionary(); // これも真似てみた。起動するとき準備する感じ？.
+    _loadSpeakerSelectButtons(); // 話者選択ボタンを準備する.
   }
 
-  void _addMessage(types.Message message) {
+  void _addMessage(types.Message message, [int position = 0]) {
+    // 安全装置: 《セリフを追加する》で長文を分割追加中に《すべて削除する》するとRangeErrorになるため.
+    if (position < 0 || _messages.length < position) {
+      position = 0;
+    }
     setState(() {
-      _messages.insert(0, message); // もとは0。好きな位置にメッセージを挿入できる.
+      _messages.insert(position, message);
     });
   }
 
-  // 添付ボタン押したときの表示と各項目を押したときの挙動がここで決まる。関数になってる？.
+  // 画面左下の添付ボタンで動き出す関数.
   void _handleAttachmentPressed() {
-    // 表示する各ボタンを準備する。リストにまとめるギミックにしてみた.
-    final textButtons = <Widget>[];
-    print(_charactersDictionary); // 読みだせてるかデバッグ.
-
-    // 二重ループでリストにボタンを追加しまくる。これはヤバいでPADの速度じゃありえん.
-    // 起動時にリストを作って準備しておく…より先にBuild覚えやないかんちゃう？.
-    for (int i = 0; i < _charactersDictionary.length; i++) {
-      for (var j = 0; j < _charactersDictionary[i]['styles'].length; j++) {
-        textButtons.add(
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _handleCharactorSelection(
-                speakerId: _charactersDictionary[i]['styles'][j]['id'],
-                styleName: _charactersDictionary[i]['styles'][j]['name'],
-                characterName: _charactersDictionary[i]['name'],
-                characterId: _charactersDictionary[i]['speaker_uuid'],
-              ); // キャラ選択時にはこの関数が動く.
-            },
-            child: Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: Text(
-                '${_charactersDictionary[i]['name']}（${_charactersDictionary[i]['styles'][j]['name']}）',
-              ),
-            ),
-          ),
-        );
-      }
-    }
-
-    // もとからあったフォト、ファイル、キャンセルのボタンも追加する.
-    textButtons.add(
-      TextButton(
-        onPressed: () {
-          Navigator.pop(context);
-          _handleImageSelection();
-        },
-        child: const Align(
-          alignment: AlignmentDirectional.centerStart,
-          child: Text('Photo'),
-        ),
-      ),
-    );
-    textButtons.add(
-      TextButton(
-        onPressed: () {
-          Navigator.pop(context);
-          _handleFileSelection();
-        },
-        child: const Align(
-          alignment: AlignmentDirectional.centerStart,
-          child: Text('File'),
-        ),
-      ),
-    );
-    textButtons.add(
-      TextButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Align(
-          alignment: AlignmentDirectional.centerStart,
-          child: Text('Cancel'),
-        ),
-      ),
-    );
-
-    // 実際に表示しているのがここ.
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true, // これ追加するだけでスクロールし始めた。見直したぜFlutter(カッコがやばい).
@@ -156,10 +95,10 @@ class _ChatPageState extends State<ChatPage> {
           child: Scrollbar(
             radius: const Radius.circular(10),
             child: SingleChildScrollView(
-              // 最上段に突き当たると自動で閉じてほしい欲が出てくるが難しいっぽい.
+              // 最上段に突き当たると自動で閉じてほしい欲が出てくる。RefreshIndicatorでpopを発動すればできそう.
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: textButtons, // 上で準備したリストを表示する.
+                children: _characterSelectButtons, // 最終的に表示する中身がこれ。先に準備できている必要がある.
               ),
             ),
           ),
@@ -169,9 +108,7 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   void _handleFileSelection() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.any,
-    );
+    final result = await FilePicker.platform.pickFiles(type: FileType.any);
 
     if (result != null && result.files.single.path != null) {
       final message = types.FileMessage(
@@ -214,26 +151,15 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
-  // キャラ選択から選んだとき呼び出す関数。まねして追加してみた.
-  void _handleCharactorSelection({
-    required int speakerId,
-    required String characterName,
-    required String styleName,
-    required String characterId,
-  }) async {
-    _user = types.User(
-      id: characterId,
-      firstName: characterName,
-      lastName: styleName,
-      updatedAt: speakerId,
-    ); // John Doeの部分に代入していく.
-    print(
-      'ユーザーID${_user.id}、話者ID${_user.updatedAt}の姓${_user.firstName}名${_user.lastName}さんになりました',
-    );
-
+  // キャラ選択から選んだとき呼び出す関数.
+  void _handleCharactorSelection({required types.User whoAmI}) async {
     setState(() {
-      _messages;
-    }); // 表示を更新する。こんなことしてたら重くなるんじゃ？ともかくおもしろい操作感になった.
+      _user = whoAmI;
+    });
+    print('ユーザーID${_user.id}、話者ID${_user.updatedAt}の姓${_user.firstName}名${_user.lastName}さんになりました');
+
+    incrementSpeakerUseCount(speakerId: whoAmI.updatedAt ?? -1); // 禍根: ID-1の使用履歴が増えるかも.
+    _loadSpeakerSelectButtons(); // 好感度ゲージを更新するためにリロードする.
   }
 
   void _handleMessageTap(BuildContext _, types.Message message) async {
@@ -243,9 +169,8 @@ class _ChatPageState extends State<ChatPage> {
       if (message.uri.startsWith('http')) {
         try {
           final index = _messages.indexWhere((element) => element.id == message.id); // Idからメッセージの位置を逆引きしてる.
-          final updatedMessage = (_messages[index] as types.FileMessage).copyWith(
-            isLoading: true,
-          ); // 特定のプロパティだけ上書きしつつコピーしてる.
+          final updatedMessage =
+              (_messages[index] as types.FileMessage).copyWith(isLoading: true); // 特定のプロパティだけ上書きしつつコピーしてる.
 
           setState(() {
             _messages[index] = updatedMessage;
@@ -263,26 +188,17 @@ class _ChatPageState extends State<ChatPage> {
           }
         } finally {
           final index = _messages.indexWhere((element) => element.id == message.id);
-          final updatedMessage = (_messages[index] as types.FileMessage).copyWith(
-            isLoading: null,
-          );
+          final updatedMessage = (_messages[index] as types.FileMessage).copyWith(isLoading: null);
 
           setState(() {
             _messages[index] = updatedMessage;
           });
         }
       }
-
       await OpenFilex.open(localPath);
-    } else {
-      // ToDo: Future、await、asyncよくわからずに使っているので要チェック.
+    } else if (message is types.TextMessage) {
       print('ふきだしタップを検出。メッセージIDは${message.id}。再再生してみます！');
-
-      if (message is! types.TextMessage) {
-        return; // もはや型チェックいらんくしたけどどうすっかな？.
-      }
-      // 再生してみて成否を取得.
-      final isURLStillPlayable = await playerKun.playFromMessage(message);
+      final isURLStillPlayable = await playerKun.playFromMessage(message); // 再生してみて成否を取得.
       if (!isURLStillPlayable) {
         _synthesizeFromMessage(message); // 再合成する。連打しないでね🫡.
       }
@@ -290,46 +206,27 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   // ふきだしを長押ししたときここが発動.
-  void _handleMessageLongPress(BuildContext _, types.Message message) async {
+  void _handleMessageLongPress(BuildContext _, types.Message message) {
     print('メッセージ${message.id}が長押しされたのを検出しました😎型は${message.runtimeType}です');
 
     if (message is! types.TextMessage) {
       print('TextMessage型じゃないので何もしません');
-      return;
-    } // あらかじめフィルターする.
-
-    final String? selectedText = await showDialog<String>(
-      context: context,
-      builder: (_) => const FukidashiLongPressDialog(),
-    );
-    print('$selectedTextボタンが選択されました!');
-    // ↕俺が操作する間の時間経過あり。この間にmessageが書き換わってる可能性（合成完了時など）があるのでUUIDを渡す.
-    switch (selectedText) {
-      case '削除する':
-        _deleteMessage(message.id);
-        break; // これいる？.
-      case '音声をダウンロードする（.wav）':
-        _goToDownloadPage(message.id);
-        break;
-      case '音声をダウンロードする（.mp3）':
-        _goToDownloadPageMp3(message.id);
-        break;
-      case 'セリフを追加する':
-        _addMessageBelow(message.id);
-        break;
-      case '話者を変更する（入力欄の話者へ）':
-        _changeSpeaker(message.id, _user);
-        break;
-      case '上に移動する':
-        _moveMessageUp(message.id);
-        break;
-      case '下に移動する':
-        _moveMessageDown(message.id);
-        break;
-      default:
-        print('【異常系】： switch文の引数になりえないデータです。（nullとか）');
-        break;
+      return; // あらかじめフィルターする.
     }
+
+    showDialog<String>(
+      context: context,
+      builder: (_) => FukidashiLongPressDialog(
+        // ↕操作するまで時間経過あり。この隙にmessageが書き換わってる可能性（合成完了時など）があるのでUUIDを渡す.
+        onAddMessageBelowPressed: () => _addMessageBelow(message.id),
+        onChangeSpeakerPressed: () => _changeSpeaker(message.id, _user),
+        onDeleteMessagePressed: () => _deleteMessage(message.id),
+        onDownloadMp3Pressed: () => _goToDownloadPageMp3(message.id),
+        onDownloadWavPressed: () => _goToDownloadPage(message.id),
+        onMoveMessageUpPressed: () => _moveMessageUp(message.id),
+        onMoveMessageDownPressed: () => _moveMessageDown(message.id),
+      ),
+    );
   }
 
   void _deleteMessage(String messageId) {
@@ -376,7 +273,7 @@ class _ChatPageState extends State<ChatPage> {
       Fluttertoast.showToast(msg: 'ブラウザを起動します😆');
       launchChrome(_messages[index].metadata?['mappedAudioURLs']['wavDownloadUrl']);
     } else {
-      Fluttertoast.showToast(msg: 'まだ合成中です🤔'); // これだけでトースト表示😘.
+      Fluttertoast.showToast(msg: 'まだ合成していません🤔'); // これだけでトースト表示😘.
       return;
     }
   }
@@ -387,30 +284,22 @@ class _ChatPageState extends State<ChatPage> {
       Fluttertoast.showToast(msg: 'ブラウザを起動します😆');
       launchChrome(_messages[index].metadata?['mappedAudioURLs']['mp3DownloadUrl']);
     } else {
-      Fluttertoast.showToast(msg: 'まだ合成中です🤔'); // これだけでトースト表示😘.
+      Fluttertoast.showToast(msg: 'まだ合成していません🤔'); // これだけでトースト表示😘.
       return;
     }
   }
 
   void _addMessageBelow(String messageId) async {
-    // _addMessageとはなんの関係もございません…！insertMessage？も違うしなぁ😴.
     final index = _messages.indexWhere((element) => element.id == messageId);
-    final text = await showEditingDialog(context, '${_user.firstName}（${_user.lastName}）');
+    final inputtedText = await showEditingDialog(context, '${_user.firstName}（${_user.lastName}）');
     // ↕時間経過あり.
-    if (text == null) {
+    if (inputtedText == null) {
       await Fluttertoast.showToast(msg: 'ぬるぽ');
       return;
     }
-    final newMessage = types.TextMessage(
-      author: _user, // 時間経過中に長押しメッセージ消えてる可能性あるので(ある？)これで.
-      createdAt: DateTime.now().millisecondsSinceEpoch,
-      id: const Uuid().v4(),
-      text: text,
-    );
-    setState(() {
-      _messages.insert(index, newMessage);
-    });
-    _synthesizeFromMessage(newMessage);
+    final partialText = types.PartialText(text: inputtedText);
+    _handleSendPressed(partialText, index); // これによって長文分割に対応.
+    // 長文を分割追加中に《すべて削除する》すると順番がおかしくなるのは_addMessageの安全装置によるもの😫.
   }
 
   void _changeSpeaker(String messageId, types.User afterActor) {
@@ -430,22 +319,17 @@ class _ChatPageState extends State<ChatPage> {
     print('👫$messageIdの話者を変更して${updatedMessage.id}に置換しました');
   }
 
-  void _handlePreviewDataFetched(
-    types.TextMessage message,
-    types.PreviewData previewData,
-  ) {
+  void _handlePreviewDataFetched(types.TextMessage message, types.PreviewData previewData) {
     final index = _messages.indexWhere((element) => element.id == message.id);
-    final updatedMessage = (_messages[index] as types.TextMessage).copyWith(
-      previewData: previewData,
-    );
+    final updatedMessage = (_messages[index] as types.TextMessage).copyWith(previewData: previewData);
 
     setState(() {
       _messages[index] = updatedMessage;
     });
   }
 
-  // 送信ボタン押すときここが動く.
-  void _handleSendPressed(types.PartialText message) async {
+  // 送信ボタン押すときここが動く。《セリフを追加》のときも.
+  void _handleSendPressed(types.PartialText message, [int position = 0]) async {
     final splittedTexts = splitTextIfLong(message.text); // もともとPartialText.text以外投稿に反映されてないからいいよね😚.
     for (var pickedText in splittedTexts) {
       final textMessage = types.TextMessage(
@@ -454,7 +338,7 @@ class _ChatPageState extends State<ChatPage> {
         id: const Uuid().v4(),
         text: pickedText,
       );
-      _addMessage(textMessage);
+      _addMessage(textMessage, position); // 最新メッセージは[0]なのでこれでヨシ.
       _synthesizeFromMessage(textMessage); // これだけで合成できちゃうぞ～.
       await Future.delayed(const Duration(milliseconds: 500)); // 演出.
     }
@@ -462,53 +346,63 @@ class _ChatPageState extends State<ChatPage> {
 
   // 音声合成する。TextMessage型を渡せば合成の準備から完了後の表示変更まですべてサポート！.
   void _synthesizeFromMessage(types.TextMessage message) async {
-    final targetMessageId = message.id; // メッセージ更新時に取り扱うのはUUIDベースだと意識付ける.
+    final targetMessageId = message.id; // 合成中にメッセージの位置は変わりうるのでメッセージを更新する際はUUIDで逆引きする.
 
-    // 合成中とわかる表示に更新する.
-    final index = _messages.indexWhere((element) => element.id == targetMessageId);
-    final updatedMessage = (_messages[index] as types.TextMessage).copyWith(status: types.Status.sending);
-    setState(() {
-      _messages[index] = updatedMessage;
-    });
-
-    final serif = await convertTextToSerif(message.text); // 読み方辞書を適用して置換する.
-
-    final synthesizeResponce = await synthesizerChan.synthesizeSerif(
-      serif: serif,
-      speakerId: message.author.updatedAt,
-    );
-    // ↕音声合成完了までの時間経過あり.
-    // メッセージにマップを格納し、合成完了/合成エラーと分かる表示に更新する.
-    try {
-      // ASはAfterSynthesize。mappedAudioURLsキーの名前は他でも使う☢.
-      final indexAS = _messages.indexWhere((element) => element.id == targetMessageId);
-      // もとのmetadataを保持👻 空ならnull合体演算子で空mapを作成😶.
-      final updatedMetadataAS = _messages[indexAS].metadata ?? {};
-      updatedMetadataAS['mappedAudioURLs'] = synthesizeResponce;
-      var updatedMessageAS = _messages[indexAS]; // スコープのためここで定義.
-      if (synthesizeResponce['mp3DownloadUrl'] == null) {
-        updatedMessageAS = (updatedMessageAS).copyWith(
-          status: types.Status.error,
-          metadata: updatedMetadataAS,
-        );
-      } else {
-        updatedMessageAS = (updatedMessageAS).copyWith(
-          status: types.Status.sent,
-          metadata: updatedMetadataAS,
-        );
-      }
-      setState(() {
-        _messages[indexAS] = updatedMessageAS;
-      });
-    } catch (e) {
-      // 合成中にメッセージを削除すると例外。使い方合ってる？.
-      await Fluttertoast.showToast(msg: 'キャッチ🤗\n見つからなかったので例外発生！');
+    // 重複して合成しないようにチェックする。意図しないタイミングでこれが出たら待ちリスト制御の見直しが必要.
+    if (synthesizerChan.isMeAlreadyThere(targetMessageId)) {
+      await Fluttertoast.showToast(msg: 'まだ合成中です🤔');
       return;
     }
+
+    // 合成中とわかる表示に更新する.
+    final indexBS = _messages.indexWhere((element) => element.id == targetMessageId);
+    final updatedMessageBS = (_messages[indexBS] as types.TextMessage).copyWith(status: types.Status.sending);
+    setState(() {
+      _messages[indexBS] = updatedMessageBS; // BeforeSynthesize。合成完了後も更新するので取り違えないための名前😢.
+    });
+
+    final synthesizeResponce = await synthesizerChan.synthesizeText(
+      text: message.text,
+      speakerId: message.author.updatedAt,
+      messageId: message.id,
+    );
+    // ↕音声合成完了までの時間経過あり.
+
+    // 最新のメッセージIDの状況をsynthesizerChanに教える。このタイミングは↓のreturnより前、かつ長文分割合成時に適度な間隔で動かせる.
+    final messageIDs = [for (var pickedMessage in _messages) pickedMessage.id];
+    final sortedByPriority = messageIDs.reversed.toList(); // 上にあるメッセージから合成されてほしいため.
+    synthesizerChan.organizeWaitingOrders(sortedByPriority); // ←引数は優先度順.
+
+    // メッセージにURLマップを格納し、合成完了/合成エラーと分かる表示に更新していく.
+    final indexAS = _messages.indexWhere((element) => element.id == targetMessageId); // AfterSynthesize.
+    if (indexAS == -1) {
+      print('🤯$synthesizeResponceに更新しようと思ったら…メッセージが消えてる！');
+      return;
+    } // Try-Catch使うまでもなくね？と思ったのでシンプル化した。例外出るようになったら戻すこと🤗.
+
+    final updatedMetadataAS = _messages[indexAS].metadata ?? {}; // もとのmetadataを保持👻 空ならnull合体演算子で空Mapを作成😶.
+    updatedMetadataAS['mappedAudioURLs'] = synthesizeResponce; // キーの変更時は要注意☢.
+
+    types.Message updatedMessageAS; // スコープのためここで定義.
+    if (synthesizeResponce['mp3DownloadUrl'] == null) {
+      updatedMessageAS = (_messages[indexAS]).copyWith(
+        status: types.Status.error,
+        metadata: updatedMetadataAS,
+      );
+    } else {
+      updatedMessageAS = (_messages[indexAS]).copyWith(
+        status: types.Status.sent,
+        metadata: updatedMetadataAS,
+      );
+    }
+    setState(() {
+      _messages[indexAS] = updatedMessageAS;
+    });
+
     print('😆$targetMessageIdの音声合成が正常に完了しました!');
   }
 
-  // User型しか入ってこない。さあどうしよう.
+  // User型しかやってこない。さあどうしよう.
   void _handleAvatarTap(types.User tappedUser) {
     print('$tappedUserのアイコンがタップされました');
     setState(() {
@@ -523,19 +417,77 @@ class _ChatPageState extends State<ChatPage> {
     final response = await rootBundle.loadString('assets/messages.json');
     final messages =
         (jsonDecode(response) as List).map((e) => types.Message.fromJson(e as Map<String, dynamic>)).toList();
-
     setState(() {
       _messages = messages;
     });
   }
 
-  // キャラクター一覧JSONをアセットからロードしていくぜ！.
-  void _loadCharactersDictionary() async {
-    // "isn't referenced" って「俺はこんなの認めねーよ」だと思ったら違うんかい.
-    final charactersDictionaryRaw = await rootBundle.loadString('assets/charactersDictionary.json');
-    // ここで例外なら『［Flutter］Assets （テキスト、画像）の利用方法』.
-    final charactersDictionary = json.decode(charactersDictionaryRaw);
-    _charactersDictionary = charactersDictionary;
+  // 選択ボタンウィジェットを準備する。好感度ゲージを更新したい場合はここを動かすこと.
+  void _loadSpeakerSelectButtons() async {
+    final textButtons = <TextButton>[];
+    final charactersDictionary = await loadCharactersDictionary();
+
+    // 二重ループでリストにボタンを追加しまくる。これはヤバいでPADの速度じゃありえん.
+    // 起動時にリストを作って準備しておく…ことになった。毎回テイクアウトではコストがかさむため。←今は何言ってるか分かるけども….
+    for (final pickedCharacter in charactersDictionary) {
+      for (final pickedUser in pickedCharacter) {
+        textButtons.add(
+          TextButton(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('${pickedUser.firstName}（${pickedUser.lastName}）'),
+                Transform.flip(
+                  flipX: true,
+                  child: await takeoutSpeakerFavorabilityGauge(pickedUser.updatedAt ?? -1),
+                ),
+              ],
+            ),
+            onPressed: () {
+              Navigator.pop(context);
+              _handleCharactorSelection(whoAmI: pickedUser); // キャラ選択時にはこの関数が動く.
+            },
+          ),
+        );
+      }
+    }
+
+    // もとからあったフォト、ファイル、キャンセルのボタンも追加する.
+    textButtons.add(
+      TextButton(
+        onPressed: () {
+          Navigator.pop(context);
+          _handleImageSelection();
+        },
+        child: const Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: Text('Photo'),
+        ),
+      ),
+    );
+    textButtons.add(
+      TextButton(
+        onPressed: () {
+          Navigator.pop(context);
+          _handleFileSelection();
+        },
+        child: const Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: Text('File'),
+        ),
+      ),
+    );
+    textButtons.add(
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: Text('Cancel'),
+        ),
+      ),
+    );
+
+    _characterSelectButtons = textButtons;
   }
 
   // メッセージを空にする.
@@ -556,7 +508,7 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
-  // テキストのエクスポート.
+  // テキストとしてエクスポート.
   void _showTextExportView() {
     final exportingText = makeText(_messages);
     // ↓async関数にする場合if(mounted)が必要になるかも.
@@ -566,8 +518,7 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
-  // プロジェクトのインポート.
-  // ノリで作ってしまったが絶対あぶない動き方。ヤバイ火遊び🎩🧢.
+  // プロジェクトのインポート。ノリで作ってしまったが絶対あぶない動き方。ヤバイ火遊び🎩🧢.
   void _letsImportProject() async {
     final whatYouInputted = await showEditingDialog(context, 'ずんだ');
     // ↕時間経過あり.
@@ -590,12 +541,12 @@ class _ChatPageState extends State<ChatPage> {
         onExportProjectPressed: _showProjectExportView,
         onExportAsTextPressed: _showTextExportView,
         onImportProjectPressed: _letsImportProject,
-        onEditTextDictionaryPressed: () => showDictionaryEditWindow(context),
+        onEditTextDictionaryPressed: () => showDictionaryEditPage(context),
       ),
     );
   }
 
-  // 先頭から順番に再生する関数。状態管理？😌そんなものはちょっとある.
+  // 先頭から順番に再生する関数。状態管理？😌そんなものはない.
   void _startPlayAll() async {
     final thisIsIterable = _messages.reversed; // 再生中にリストに変更が加わると例外になるためコピーする.
     final targetMessages = thisIsIterable.toList(); // なおもIterableのため固定する.
@@ -628,7 +579,6 @@ class _ChatPageState extends State<ChatPage> {
           showUserAvatars: true,
           showUserNames: true,
           user: _user,
-          // なぜかエラーになる isLeftStatus: false, .
           theme: const DefaultChatTheme(
             seenIcon: Text(
               'read',
