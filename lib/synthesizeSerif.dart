@@ -2,10 +2,11 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
-import 'package:fluttertoast/fluttertoast.dart';
 import 'package:just_audio/just_audio.dart';
 
-// .apkにビルドすると喋らなくなるなら『Android でインターネットに接続するためのパーミッションを設定する』かも.
+import 'text_dictionary_editor.dart';
+
+// 実機では喋らなくなるなら『Android でインターネットに接続するためのパーミッションを設定する』かも.
 
 class NewSuperSynthesizer {
   // これもコンストラクタ。インスタンス生成時に実行される.
@@ -16,25 +17,82 @@ class NewSuperSynthesizer {
   final _playlistPlayer = AudioPlayer();
   final _playlist = ConcatenatingAudioSource(children: []);
 
-  // チャット画面の送信順=orderWaitingList=playlistAddWaitingListになるように制御する😦.
-  final _orderWaitingList = <DateTime>[];
+  // チャット画面の送信順=orderWaitingList=playlistAddWaitingListになるように制御すること😦.
+  var _orderWaitingList = <String>[];
   final _playlistAddWaitingList = <DateTime>[];
 
-  // 😆mainから見える唯一のメソッド.
-  Future<Map<String, dynamic>> synthesizeSerif({required String serif, int? speakerId}) async {
-    // 順番待ちシステム。改造後に合成できなくなったらまず疑うこと😹.
-    final registrationTime = DateTime.now(); // オーダーが通ったら必ず自分のIDを消しましょう！！😹😹😹.
-    _orderWaitingList.add(registrationTime);
-    while (_orderWaitingList[0] != registrationTime) {
+  // 🤔順番待ちリストを整理し、順番入れ替えや合成キャンセルが行えるメソッド。引数は優先度高い順。好きなタイミングで発動していいし、発動しなくてもいい.
+  void organizeWaitingOrders(List<String> messageIDs) {
+    final updatedList = <String>[];
+    for (final pickedItem in messageIDs) {
+      if (_orderWaitingList.contains(pickedItem)) {
+        updatedList.add(pickedItem);
+      }
+    }
+
+    print('😂${DateTime.now()} 順番待ち列を整理しました！${updatedList.length - _orderWaitingList.length}個');
+    _orderWaitingList = updatedList; // 引数に含まれないIDはなくなる.
+  }
+
+  // 🤐すでに順番待ち列に並んでいるか確認できるメソッド。重複オーダー防止にご活用ください.
+  bool isMeAlreadyThere(String messageId) {
+    if (_orderWaitingList.contains(messageId)) {
+      return true;
+    }
+    return false;
+  }
+
+  // 😆主役のメソッド。実態は順番待ちコントローラー。順番待ちに関係ない部分は徹底的に分けた.
+  Future<Map<String, dynamic>> synthesizeText({required String text, int? speakerId, required String messageId}) async {
+    // 順番待ちシステム。合成できなくなったらまず疑うこと😹.
+    _orderWaitingList.add(messageId); // オーダーが通ったら必ず自分のIDを消しましょう！！😹😹😹.
+    while (_orderWaitingList[0] != messageId) {
+      await Future.delayed(const Duration(seconds: 1));
+
+      // 整理システム搭載により、いつのまにかリストから消える可能性が出てきた。無限待機になる前にmainに帰る.
+      if (!_orderWaitingList.contains(messageId)) {
+        return {'success': false, 'errorMessage': '順番待ちから消えてます！🤯'};
+      }
+    }
+
+    final serif = await convertTextToSerif(text); // 読み方辞書を適用して置換する.
+
+    final responceBodyMapped = await _phase1Request(serif: serif, speakerId: speakerId);
+
+    _orderWaitingList.remove(messageId); // オーダーを出したので順番を進める😸 整理システムにより順番が変わるのでremoveAtから変更した.
+
+    // オーダーが受理されなかった場合はここでmainに帰る.
+    if (responceBodyMapped['mp3DownloadUrl'] == null || responceBodyMapped['audioStatusUrl'] == null) {
+      return responceBodyMapped;
+    }
+
+    // 今度はプレイリスト追加フェーズを順番待ちする.
+    final registrationTime = DateTime.now();
+
+    _playlistAddWaitingList.add(registrationTime); // あとで必ず解除すること！！😹😹😹.
+    while (_playlistAddWaitingList[0] != registrationTime) {
       await Future.delayed(const Duration(seconds: 1));
     }
 
+    await _phase2WaitAndPlay(
+      mp3DownloadUrl: responceBodyMapped['mp3DownloadUrl'],
+      audioStatusUrl: responceBodyMapped['audioStatusUrl'],
+    );
+
+    _playlistAddWaitingList.removeAt(0); // プレイリストへの追加が完了したので順番を進める😸😸😸.
+
+    print('😊${DateTime.now()} メッセージID「$messageId」の合成完了！synthesizeSerifメソッドを終了するよ');
+    return responceBodyMapped;
+  }
+
+  // 😝音声合成をオーダーするフェーズ。phase1Orderでは10に見えてしまうのでこの名前に.
+  static Future<Map<String, dynamic>> _phase1Request({required String serif, int? speakerId}) async {
     // 音声合成にはsu-shiki.comさんの『WEB版VOICEVOX API（低速）』を利用させていただきます。便利なサービスを提供してくださり本当にありがたい限りです！😘.
     final requestUrl =
         'https://api.tts.quest/v3/voicevox/synthesis?speaker=$speakerId&text=${Uri.encodeComponent(serif)}';
     print('😘音声合成をオーダーするURLは$requestUrl');
 
-    var responceBodyMapped = <String, dynamic>{'デフォルト': true}; // メイン側のmappedAudioURLs.
+    var responceBodyMapped = <String, dynamic>{'デフォルト': true};
 
     // 音声合成オーダーを出す。連続でオーダーを出すとretryAfter秒待てと言われるのでリトライする.
     for (var retry = 1; retry < 6; retry++) {
@@ -50,55 +108,33 @@ class NewSuperSynthesizer {
       }
       await Future.delayed(const Duration(seconds: 2));
     }
-    _orderWaitingList.removeAt(0); // オーダーを出したので順番を進める😸😸😸
 
-    // それでもオーダーが受理されなかった場合はここでmainに帰る.
-    if (responceBodyMapped['mp3DownloadUrl'] == null) {
-      return responceBodyMapped;
-    }
+    return responceBodyMapped;
+  }
 
-    // AudioCountを取得する。すぐアクセスすると0と返ってくるのでリトライする.
+  // 😋合成待ちフェーズと再生フェーズ.
+  Future<void> _phase2WaitAndPlay({required String mp3DownloadUrl, required String audioStatusUrl}) async {
+    // AudioCountを取得する。すぐアクセスすると0が返ってくるのでリトライする.
     var audioStatusMapped = <String, dynamic>{'デフォルト': true};
     for (var retry = 1; retry < 100; retry++) {
-      audioStatusMapped = await _accessAPI(responceBodyMapped['audioStatusUrl']);
+      audioStatusMapped = await _accessAPI(audioStatusUrl);
 
       if (audioStatusMapped['audioCount'] > 0) {
         print('😋audioCountが判明！${audioStatusMapped['audioCount']}です');
         break;
       } else if (audioStatusMapped['isAudioError'] == true) {
-        return audioStatusMapped; // 絵文字だけのオーダーは合成エラー。ここでmainに帰る.
+        return; // 絵文字だけのオーダーは合成エラー。ここで.syntheに帰る.
       }
       print('😴まだaudioCount=0なので$retry秒待ちます');
       await Future.delayed(Duration(seconds: retry));
     }
 
-    // それでもaudioCountが取得できなかった場合はここでmainに帰る.
-    if (audioStatusMapped['audioCount'] == null) {
-      return audioStatusMapped;
+    // それでもaudioCountが取得できなかった場合はここで.syntheに帰る.
+    if (audioStatusMapped['audioCount'] is! int) {
+      return;
     }
 
-    await _atohaMakasero(
-      mp3DownloadUrl: responceBodyMapped['mp3DownloadUrl'],
-      audioCount: audioStatusMapped['audioCount'],
-      registrationTime: registrationTime,
-    );
-
-    print('😊${DateTime.now()} 順番待ちId「$registrationTime」の合成完了！synthesizeSerifメソッドを終了するよ');
-    return responceBodyMapped;
-  }
-
-  // 😋合成待ちフェーズと再生フェーズ。mainへのフィードバックに不要な部分なので分けてみた。分けんくてよかった？.
-  Future<void> _atohaMakasero({
-    required String mp3DownloadUrl,
-    required int audioCount,
-    required DateTime registrationTime,
-  }) async {
-    // プレイリスト追加を順番待ちする。このタイミングで待ち始めるということはaudioCountが準備できた順番とorderWaitingListが（偶然）一致していることが前提になる🙀.
-    _playlistAddWaitingList.add(registrationTime); // あとで必ず解除すること！！😹😹😹途中でreturn設けるときは注意👺.
-    while (_playlistAddWaitingList[0] != registrationTime) {
-      await Future.delayed(const Duration(seconds: 1));
-    }
-
+    final int audioCount = audioStatusMapped['audioCount'];
     final mp3AudioCountableUrl = mp3DownloadUrl.replaceFirst('audio.mp3', ''); // "数字.mp3" を後付けできるURLを作る.
 
     // 一定の割合が合成完了するまで待つ。追いつくことがあるので🐇.
@@ -114,7 +150,7 @@ class NewSuperSynthesizer {
       }
     }
 
-    await _playlistPlayer.play(); // すでにplay中でも、リストが空でも.play可能.
+    await _playlistPlayer.play();
 
     // 確認次第じゃんじゃんプレイリストに追加していく.
     for (var i = 0; i <= audioCount - 1; i++) {
@@ -131,11 +167,10 @@ class NewSuperSynthesizer {
     }
 
     print('🥰全ACのプレイリストへの追加が完了しました');
-    _playlistAddWaitingList.removeAt(0); // 追加が完了したので順番を進める😸😸😸.
   }
 
   // 😎HTTPリクエスト(GET)を出す。エラーならerroredMapを返す.
-  Future<Map<String, dynamic>> _accessAPI(String url) async {
+  static Future<Map<String, dynamic>> _accessAPI(String url) async {
     try {
       // おぶじぇくとを作る。『DartでHTTPリクエストを送信する』より.
       final requestObject = await HttpClient().getUrl(Uri.parse(url));
@@ -152,7 +187,7 @@ class NewSuperSynthesizer {
   }
 
   // 🧐再生できるかチェックする。関数内の関数がクラス内のプライベートメソッドに昇格。中身同じでもゴージャスに聞こえる.
-  Future<bool> _checkAudioUrlPlayable(String mp3Url) async {
+  static Future<bool> _checkAudioUrlPlayable(String mp3Url) async {
     try {
       final requestObject = await HttpClient().getUrl(Uri.parse(mp3Url));
       final response = await requestObject.close(); // れすぽんせ.
@@ -171,10 +206,7 @@ class NewSuperSynthesizer {
 
   // 😚このクラスのインスタンスが作成されたとき動かす初期化処理.
   void _initialize() async {
-    // .setAudioSourceするたびリスト先頭に戻るため1回だけ行う.
-    await _playlistPlayer.setAudioSource(
-      _playlist,
-    );
+    await _playlistPlayer.setAudioSource(_playlist); // .setAudioSourceするたびリスト先頭に戻るため1回だけ行う.
   }
 }
 // （下ほど新しいコメント）.
@@ -209,6 +241,15 @@ class NewSuperSynthesizer {
 // .setAudioSourceするとその都度[0]から再生になる（?付き引数になっている）.
 // プレイリストが空のとき.playするとプレイリストに追加されるまで待つモードになる。アプリの外からは再生中として扱われるので待ちかねてYouTube見始めると追加しても鳴り始めない.
 // 順番待ちシステムができた！長文分割投稿システムとのシナジー効果大爆発（WaitingListの制御から目をそらしながら）.
+// ユーザーが入力したものは「テキスト」、音声合成に最適化したものは「セリフ」。辞書機能の追加時とか[いつ？]区別しやすくなる。…と当初は思ってました.
+// なぜか急に重くなる問題（は？）、compute関数でマルチスレッド化しても変化なし。まさか辞書UIがあかんのか？.
+// 順番待ちギミック部分を.syntheにまとめたい。"途中でreturn設けるときは注意👺" とか書かなければならないほど複雑.
+// 読み方辞書を用いたテキスト→セリフ変換をこっちに持ってきた。辞書の変更がリアルタイムに反映されるようになるが流用性は薄れる.
+// オーダーをmessageIDで待つことにしたので、同じmessageIDが「佐藤さ～ん」「「はい」」のように動き出す可能性がある.
+// 2重オーダー防止のため、すでに列に並んでいるか確認可能にした。_orderWaitingListのプライベートを解除すればよかったのでは…？.
+// _orderWaitingListがいつどんな状態に変化しようと動き続ける仕組みが必要になってしまった。でもこれによってメッセージ削除と並び替えに連動できるようになる！たぶん！！.
+// 2重オーダー防止チェック、こんなことしてると「リストに載っているが人はいない」状態になったら詰んでしまわへんか？.
+// 一連の再改造で、意図した順番通りに合成される確率を上げることができた（と思う）。かわりに複雑さが爆発した（断定）.
 
 // メッセージ再再生関連を一挙に制御するクラス作ったった！.
 class AudioPlayManager {
@@ -226,10 +267,8 @@ class AudioPlayManager {
       await _playerObjects[index].play();
       return true;
     } catch (e) {
-      // 再生できないURLなら例外になる。やっぱ例外だすんやね😮‍💨.
-      await Fluttertoast.showToast(msg: 'まだ合成中です🤔');
       print('キャッチ！🤗${message.id}の$mp3DownloadUrlは$eのためアクセスできませんでした。現場からは以上です。');
-      return false;
+      return false; // 再生できないURLなら例外になる。やっぱ例外だすんやね😮‍💨.
     }
   }
 
