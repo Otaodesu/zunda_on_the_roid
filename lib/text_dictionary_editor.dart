@@ -10,23 +10,23 @@ import 'ui_dialog_classes.dart';
 // すっごい文脈依存なtextDictionaryなる表現が繰り返されている！明日にはきっと理解できない🤯.
 
 // 辞書編集画面を呼び出す関数.
-void showDictionaryEditWindow(BuildContext context) {
+void showDictionaryEditPage(BuildContext context) {
   Navigator.push(
     context,
     MaterialPageRoute(
-      builder: (context) => const TextDictionaryEditWindow(),
+      builder: (context) => const _TextDictionaryEditPage(),
     ),
   );
 }
 
-class TextDictionaryEditWindow extends StatefulWidget {
-  const TextDictionaryEditWindow({super.key});
+class _TextDictionaryEditPage extends StatefulWidget {
+  const _TextDictionaryEditPage();
   @override
-  State<TextDictionaryEditWindow> createState() => _TextDictionaryEditWindowState();
+  State<_TextDictionaryEditPage> createState() => _TextDictionaryEditPageState();
 }
 
 // 読み方辞書編集画面.
-class _TextDictionaryEditWindowState extends State<TextDictionaryEditWindow> {
+class _TextDictionaryEditPageState extends State<_TextDictionaryEditPage> {
   List<TextEditingController> beforeControllers = [];
   List<TextEditingController> afterControllers = []; // 文字入力欄コントローラーを格納するリスト。左右独立管理🙈.
 
@@ -38,7 +38,7 @@ class _TextDictionaryEditWindowState extends State<TextDictionaryEditWindow> {
 
   void _orderLoadTextDictionary() async {
     // ↓ローカルにできるやん🤬😡😌入力欄の表示に必須な2つのTextEditingControllerリストだけ考えればOK.
-    final loadedTextDictionary = await loadTextDictionary();
+    final loadedTextDictionary = await _loadTextDictionary();
     for (var pickedItem in loadedTextDictionary) {
       setState(() {
         beforeControllers.add(TextEditingController(text: pickedItem.before));
@@ -132,7 +132,7 @@ class _TextDictionaryEditWindowState extends State<TextDictionaryEditWindow> {
     for (var i = 0; i <= beforeControllers.length - 1; i++) {
       savingTextDictionary.add(TextDictionaryItem(before: beforeControllers[i].text, after: afterControllers[i].text));
     }
-    saveTextDictionary(savingTextDictionary);
+    _saveTextDictionary(savingTextDictionary);
 
     for (var i = 0; i <= beforeControllers.length - 1; i++) {
       beforeControllers[i].dispose();
@@ -184,14 +184,14 @@ class _TextDictionaryEditWindowState extends State<TextDictionaryEditWindow> {
 
 // あ～あ～関数まで入れちゃって😩.
 
-void saveTextDictionary(List<TextDictionaryItem> savingTextDictionary) async {
+void _saveTextDictionary(List<TextDictionaryItem> savingTextDictionary) async {
   final textDictionaryAsText = jsonEncode(savingTextDictionary);
   final prefsInstance = await SharedPreferences.getInstance();
   await prefsInstance.setString('textDictionary', textDictionaryAsText); // キー名の変更時は要注意☢.
   print('${DateTime.now()}😆$textDictionaryAsTextとして保存したでな');
 }
 
-Future<List<TextDictionaryItem>> loadTextDictionary() async {
+Future<List<TextDictionaryItem>> _loadTextDictionary() async {
   final prefsInstance = await SharedPreferences.getInstance();
   final textDictionaryAsText = prefsInstance.getString('textDictionary'); // キー名の変更時は要注意☘.
   print('${DateTime.now()}😎$textDictionaryAsTextを取り出しました');
@@ -214,7 +214,7 @@ Future<List<TextDictionaryItem>> loadTextDictionary() async {
 // 辞書を適用して文字列置換する関数。ここが本命であとは脇役なんだけどなぁ.
 Future<String> convertTextToSerif(String text) async {
   print('${DateTime.now()}🥱辞書をロードします');
-  final textDictionary = await loadTextDictionary();
+  final textDictionary = await _loadTextDictionary();
   for (var pickedItem in textDictionary) {
     if (pickedItem.before == '') {
       continue;
