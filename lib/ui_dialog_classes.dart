@@ -5,10 +5,27 @@ import 'package:share_plus/share_plus.dart';
 
 // 言い訳: UIはどんどん込み入ってくると分かったので実際の処理と別にしたほうが理解しやすいかもと思ったんです.
 
-// まわりをタップして表示を消すとnullを返す.
-//『【Flutter】 ダイアログを出す方法』.
+// こっちのダイアログにもVoidCallbackを導入し、75行を98行にした。main側は半分に省略できたのでヨシ！😭.
+// 選択後自動で閉じさせるのに苦戦した。onPressedをブロック文にしてpopを追加→on…Pressedに()を追加→VoidCallBack?のNull許容を解除→this.をrequiredにしてようやく思った動きに。ってこれPhotoボタンと同じやん.
 class FukidashiLongPressDialog extends StatelessWidget {
-  const FukidashiLongPressDialog({super.key});
+  const FukidashiLongPressDialog({
+    super.key,
+    required this.onDeleteMessagePressed,
+    required this.onMoveMessageUpPressed,
+    required this.onMoveMessageDownPressed,
+    required this.onDownloadWavPressed,
+    required this.onDownloadMp3Pressed,
+    required this.onAddMessageBelowPressed,
+    required this.onChangeSpeakerPressed,
+  });
+
+  final VoidCallback onDeleteMessagePressed;
+  final VoidCallback onMoveMessageUpPressed;
+  final VoidCallback onMoveMessageDownPressed;
+  final VoidCallback onDownloadWavPressed;
+  final VoidCallback onDownloadMp3Pressed;
+  final VoidCallback onAddMessageBelowPressed;
+  final VoidCallback onChangeSpeakerPressed;
 
   @override
   Widget build(BuildContext context) => SimpleDialog(
@@ -16,71 +33,77 @@ class FukidashiLongPressDialog extends StatelessWidget {
         surfaceTintColor: Colors.green, // ずんだ色にしてみた.
         children: [
           SimpleDialogOption(
+            onPressed: () {
+              Navigator.of(context).pop();
+              onDeleteMessagePressed();
+            },
             child: const ListTile(
               leading: Icon(Icons.delete_rounded),
               title: Text('削除する'),
             ),
-            onPressed: () {
-              Navigator.pop(context, '削除する'); // このテキストを呼び出し元に返すので合わせる！.
-            },
           ),
           SimpleDialogOption(
+            onPressed: () {
+              Navigator.of(context).pop();
+              onMoveMessageUpPressed();
+            },
             child: const ListTile(
               leading: Icon(Icons.move_up_rounded),
               title: Text('上に移動する'),
             ),
-            onPressed: () {
-              Navigator.pop(context, '上に移動する'); // このテキストを呼び出し元に返すので合わせる！.
-            },
           ),
           SimpleDialogOption(
+            onPressed: () {
+              Navigator.of(context).pop();
+              onMoveMessageDownPressed();
+            },
             child: const ListTile(
               leading: Icon(Icons.move_down_rounded),
               title: Text('下に移動する'),
             ),
-            onPressed: () {
-              Navigator.pop(context, '下に移動する'); // このテキストを呼び出し元に返すので合わせる！.
-            },
           ),
           SimpleDialogOption(
+            onPressed: () {
+              Navigator.of(context).pop();
+              onDownloadWavPressed();
+            },
             child: const ListTile(
               leading: Icon(Icons.graphic_eq_rounded),
               title: Text('音声をダウンロードする（.wav）'),
             ),
-            onPressed: () {
-              Navigator.pop(context, '音声をダウンロードする（.wav）');
-            },
           ),
           SimpleDialogOption(
+            onPressed: () {
+              Navigator.of(context).pop();
+              onDownloadMp3Pressed();
+            },
             child: const ListTile(
               leading: Icon(Icons.three_mp_rounded),
               title: Text('音声をダウンロードする（.mp3）'),
             ),
-            onPressed: () {
-              Navigator.pop(context, '音声をダウンロードする（.mp3）');
-            },
           ),
           SimpleDialogOption(
+            onPressed: () {
+              Navigator.of(context).pop();
+              onAddMessageBelowPressed();
+            },
             child: const ListTile(
               leading: Icon(Icons.add_comment_rounded),
               title: Text('セリフを追加する'), // せっセリフっ…！💦synthe関数で書いたことは忘れてください.
             ),
-            onPressed: () {
-              Navigator.pop(context, 'セリフを追加する');
-            },
           ),
           SimpleDialogOption(
+            onPressed: () {
+              Navigator.of(context).pop();
+              onChangeSpeakerPressed();
+            },
             child: const ListTile(
               leading: Icon(Icons.social_distance_rounded), // 😳.
               title: Text('話者を変更する\n（入力欄の話者へ）'),
             ),
-            onPressed: () {
-              Navigator.pop(context, '話者を変更する（入力欄の話者へ）');
-            },
           ),
         ],
       );
-  // デカすぎる！表示もmain側も.
 }
 
 // 本家のchat.dartを見た。mainがスッキリしていい感じ。なんていう書き方かは知らん.
@@ -104,15 +127,12 @@ class AppBarForChat extends StatelessWidget implements PreferredSizeWidget {
   Widget build(BuildContext context) => AppBar(
         title: const Text('非公式のプロジェクト', style: TextStyle(color: Colors.black54)),
         backgroundColor: Colors.white.withAlpha(230),
-
-        // 逆に出っ張らせたいんやが？超難しそう？.
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.only(
-            bottomLeft: Radius.circular(20),
+            bottomLeft: Radius.circular(20), // 逆に出っ張らせたいんやが？超難しそう？.
             bottomRight: Radius.circular(20),
           ),
         ),
-
         actions: [
           Tooltip(
             message: '先頭から連続再生する',
@@ -308,6 +328,7 @@ class _TextEditingDialogState extends State<TextEditingDialog> {
           autofocus: true, // ダイアログが開いたときに自動でフォーカスを当てる.
           focusNode: focusNode,
           controller: controller,
+          maxLines: null, // Nullにすると複数行の入力ができる。《セリフを追加する》のためにnullにしたがJSONインポート時はごちゃつく.
           onFieldSubmitted: (_) {
             // エンターを押したときに実行される.
             Navigator.of(context).pop(controller.text);
