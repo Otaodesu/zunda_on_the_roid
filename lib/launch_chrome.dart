@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -12,10 +13,7 @@ import 'package:uuid/uuid.dart';
 // URLを入れたらChromeが起動するよ！っていう関数.
 void launchChrome(String targetUrl) async {
   final url = Uri.parse(targetUrl);
-  if (!await launchUrl(
-    url,
-    mode: LaunchMode.externalApplication,
-  )) {
+  if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
     throw Exception('Could not launch $url');
   }
 }
@@ -26,19 +24,19 @@ String makeText(List<types.Message> messages) {
   final targetMessages = thisIsIterable.toList(); // なおもIterableのため固定する.
 
   // 本家VOICEVOXの「テキスト読み込み」機能と互換性のあるテキストを作っていく😎.
-  final outputList = <String>[];
+  final compatibleTexts = <String>[];
   for (var pickedMessage in targetMessages) {
     if (pickedMessage is types.TextMessage) {
-      final textList = pickedMessage.text.split('\n'); // 本家さまで読めるように複数行のテキストを分割する.
-      for (var pickedText in textList) {
+      final texts = pickedMessage.text.split('\n'); // 本家さまで読めるように複数行のテキストを分割する.
+      for (var pickedText in texts) {
         final compatibleText = '${pickedMessage.author.firstName}(${pickedMessage.author.lastName}),$pickedText';
         print('${DateTime.now()}🤔$compatibleText');
-        outputList.add(compatibleText);
+        compatibleTexts.add(compatibleText);
       }
     }
   }
 
-  final outputText = outputList.join('\n');
+  final outputText = compatibleTexts.join('\n');
   return outputText;
 }
 
@@ -64,15 +62,15 @@ List<types.Message> combineMessagesFromJson(String? jsonText, List<types.Message
   for (var pickedMessage in additionalMessages) {
     // ↓ここに入ってくるのはテキストメッセージだけじゃない.
     final updatedMessage = (pickedMessage).copyWith(
-      id: const Uuid().v4(), // この際だから時刻も振り直します？.
+      id: const Uuid().v4(), // この際だから時刻も振り直します？←くれぐれもupdatedAtはいじるなよ🤬.
     );
     updatedMessages.add(updatedMessage);
   }
 
   updatedMessages.addAll(beforeMessages);
 
-  return updatedMessages;
-} // こんなんで動くんでしょうか？私はそうは思わにあ😹←←まったくもってそうですね.
+  return updatedMessages; // こんなんで動くんでしょうか？私はそうは思わにあ😹←←まったくもってそうですね.
+}
 
 // 長文を分割する関数。ちなみにAPIは1250文字あたりでtextTooLongエラー。快適な分割アルゴリズムは要研究.
 List<String> splitTextIfLong(String text) {
@@ -100,4 +98,28 @@ List<String> splitTextIfLong(String text) {
     }
   }
   return splittedTexts;
+}
+
+// キャラクター辞書を読み込む関数.
+Future<List<List<types.User>>> loadCharactersDictionary() async {
+  final honkeAsText = await rootBundle.loadString('assets/charactersDictionary.json');
+  // ここで例外なら『［Flutter］Assets （テキスト、画像）の利用方法』。700msくらいかかってる.
+  final honkeAsDynamic = json.decode(honkeAsText);
+
+  // 本家のjsonを二重リストに変換していく。mainの_userと同じにすること😹.
+  final charactersDictionary = <List<types.User>>[];
+  for (var i = 0; i < honkeAsDynamic.length; i++) {
+    final styles = <types.User>[];
+    for (var j = 0; j < honkeAsDynamic[i]['styles'].length; j++) {
+      final styleAsUser = types.User(
+        id: honkeAsDynamic[i]['speaker_uuid'],
+        firstName: honkeAsDynamic[i]['name'],
+        lastName: honkeAsDynamic[i]['styles'][j]['name'],
+        updatedAt: honkeAsDynamic[i]['styles'][j]['id'],
+      );
+      styles.add(styleAsUser);
+    }
+    charactersDictionary.add(styles);
+  }
+  return charactersDictionary;
 }
